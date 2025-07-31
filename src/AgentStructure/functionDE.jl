@@ -113,7 +113,10 @@ function functionDE(abm,scope,type)
 
                             return
                         end
-                        CUDA.@sync CUDA.@cuda threads=p_.platform.$(addSymbol(scope,"Threads")) blocks=p_.platform.$(addSymbol(scope,"Blocks")) kernel(dVar_,var_,[i for i in cleaned_p if typeof(i) <: CuArray || typeof(i) <: Number]...)
+                        CUDA.@sync CUDA.@cuda threads=p_.platform.$(addSymbol(scope,"Threads")) blocks=p_.platform.$(addSymbol(scope,"Blocks")) kernel(dVar_,var_,[i for i in p_ if typeof(i) <: CuArray || typeof(i) <: Number || typeof(i) <: SubArray]...)
+
+
+                        # CUDA.@sync CUDA.@cuda threads=p_.platform.$(addSymbol(scope,"Threads")) blocks=p_.platform.$(addSymbol(scope,"Blocks")) kernel(dVar_,var_,[i for i in cleaned_p if typeof(i) <: CuArray || typeof(i) <: Number]...)
                         # CUDA.@sync CUDA.@cuda threads=p_.platform.$(addSymbol(scope,"Threads")) blocks=p_.platform.$(addSymbol(scope,"Blocks")) kernel(dVar_,var_,[i for i in cleaned_p if i isa CuArray || isa(i, Number) || (isa(i, SubArray) && isa(parent(i), CuArray))]...)
 
                         return
