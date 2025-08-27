@@ -125,72 +125,142 @@ end
 
 Load the Community structure saved in file.
 """
-function loadJLD2(file::String)
+# function loadJLD2(file::String)
 
+#     if file in keys(SAVING) && isfile(file)
+#         close(SAVING[file].file)
+#         delete!(SAVING,file)
+#     end
+
+#     jldopen(file, "r") do f
+
+#         #Agent
+#         abm = ABM()
+#         abm.dims = f["abm/dims"] 
+#         abm.parameters = f["abm/parameters"] 
+#         abm.declaredUpdates = f["abm/declaredUpdates"] 
+#         abm.removalOfAgents_ = f["abm/removalOfAgents_"] 
+
+#         #Assign abm
+#         t = length(f["times"])
+#         community = Community(abm,
+#             id = f["times/$t/id"],
+#             N = f["times/$t/N"],
+#             NMedium = f["times/$t/NMedium"],
+#             t = f["times/$t/t"],
+#             dt = f["times/$t/dt"],
+#             simBox = f["times/$t/simBox"],
+#             platform = f["abm/platform"],#eval(Meta.parse("CellBasedModels.$(f["platform/platform"])()")),
+#             agentAlg = f["abm/agentAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["agentAlg/alg"])()")),
+#             agentSolveArgs = f["abm/agentAlg/args"],
+#             modelAlg = f["abm/modelAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["modelAlg/alg"])()")),
+#             modelSolveArgs = f["abm/modelAlg/args"],
+#             mediumAlg = f["abm/mediumAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["mediumAlg/alg"])()")),
+#             mediumSolveArgs = f["abm/mediumAlg/args"],
+#         )
+#         setfield!(community,:uuid,f["uuid"])
+#         for (sym,prop) in pairs(community.abm.parameters)
+#             community.parameters[sym] = f["times/$t/parameters/$sym"]
+#         end
+
+#         #Base parameters
+#         times = sort([Meta.parse(i) for i in keys(f["times"])])[1:end-1]
+#         for t in times
+#             com = Community(abm,
+#                 id = f["times/$t/id"],
+#                 N = f["times/$t/N"],
+#                 NMedium = f["times/$t/NMedium"],
+#                 t = f["times/$t/t"],
+#                 dt = f["times/$t/dt"],
+#                 simBox = f["times/$t/simBox"],
+#                 platform = f["platform/platform"],#eval(Meta.parse("CellBasedModels.$(f["platform/platform"])()")),
+#                 agentAlg = f["agentAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["agentAlg/alg"])()")),
+#                 agentSolveArgs = f["agentAlg/args"],
+#                 modelAlg = f["modelAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["modelAlg/alg"])()")),
+#                 modelSolveArgs = f["modelAlg/args"],
+#                 mediumAlg = f["mediumAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["mediumAlg/alg"])()")),
+#                 mediumSolveArgs = f["mediumAlg/args"],
+#             )
+#             for (sym,prop) in pairs(community.abm.parameters)
+#                 com.parameters[sym] = f["times/$t/parameters/$sym"]
+#             end
+    
+#             push!(community.pastTimes, com)
+#         end
+
+#         setfield!(community,:loaded,false)
+
+#         return community
+#     end
+
+# end
+
+
+function loadJLD2(file::String)
     if file in keys(SAVING) && isfile(file)
         close(SAVING[file].file)
-        delete!(SAVING,file)
+        delete!(SAVING, file)
     end
 
-    jldopen(file, "r") do f
-
-        #Agent
+    return jldopen(file, "r") do f
+        # 1) Reconstruir ABM
         abm = ABM()
-        abm.dims = f["abm/dims"] 
-        abm.parameters = f["abm/parameters"] 
-        abm.declaredUpdates = f["abm/declaredUpdates"] 
-        abm.removalOfAgents_ = f["abm/removalOfAgents_"] 
+        abm.dims              = f["abm/dims"]
+        abm.parameters        = f["abm/parameters"]
+        abm.declaredUpdates   = f["abm/declaredUpdates"]
+        abm.removalOfAgents_  = f["abm/removalOfAgents_"]
 
-        #Assign abm
-        t = length(f["times"])
-        community = Community(abm,
-            id = f["times/$t/id"],
-            N = f["times/$t/N"],
-            NMedium = f["times/$t/NMedium"],
-            t = f["times/$t/t"],
-            dt = f["times/$t/dt"],
-            simBox = f["times/$t/simBox"],
-            platform = f["abm/platform"],#eval(Meta.parse("CellBasedModels.$(f["platform/platform"])()")),
-            agentAlg = f["abm/agentAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["agentAlg/alg"])()")),
-            agentSolveArgs = f["abm/agentAlg/args"],
-            modelAlg = f["abm/modelAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["modelAlg/alg"])()")),
-            modelSolveArgs = f["abm/modelAlg/args"],
-            mediumAlg = f["abm/mediumAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["mediumAlg/alg"])()")),
-            mediumSolveArgs = f["abm/mediumAlg/args"],
+        # --- Compatibilidad hacia atrás: si no existen en abm/, busca legacy ---
+        has_abm_agent  = haskey(f, "abm/agentAlg/alg")
+        has_abm_model  = haskey(f, "abm/modelAlg/alg")
+        has_abm_medium = haskey(f, "abm/mediumAlg/alg")
+        has_abm_plat   = haskey(f, "abm/platform")
+
+        abm.agentAlg        = has_abm_agent  ? f["abm/agentAlg/alg"]    : get(f, "agentAlg/alg", abm.agentAlg)
+        abm.agentSolveArgs  = has_abm_agent  ? f["abm/agentAlg/args"]   : get(f, "agentAlg/args", Dict{Symbol,Any}())
+        abm.modelAlg        = has_abm_model  ? f["abm/modelAlg/alg"]    : get(f, "modelAlg/alg", abm.modelAlg)
+        abm.modelSolveArgs  = has_abm_model  ? f["abm/modelAlg/args"]   : get(f, "modelAlg/args", Dict{Symbol,Any}())
+        abm.mediumAlg       = has_abm_medium ? f["abm/mediumAlg/alg"]   : get(f, "mediumAlg/alg", abm.mediumAlg)
+        abm.mediumSolveArgs = has_abm_medium ? f["abm/mediumAlg/args"]  : get(f, "mediumAlg/args", Dict{Symbol,Any}())
+        abm.platform        = has_abm_plat   ? f["abm/platform"]         : get(f, "platform", abm.platform)
+
+        # 2) Último tiempo
+        tlast = length(f["times"])
+        community = Community(
+            abm;
+            id      = f["times/$tlast/id"],
+            N       = f["times/$tlast/N"],
+            NMedium = f["times/$tlast/NMedium"],
+            t       = f["times/$tlast/t"],
+            dt      = f["times/$tlast/dt"],
+            simBox  = f["times/$tlast/simBox"],
         )
-        setfield!(community,:uuid,f["uuid"])
-        for (sym,prop) in pairs(community.abm.parameters)
-            community.parameters[sym] = f["times/$t/parameters/$sym"]
+
+        # UUID (guardado como valor escalar)
+        setfield!(community, :uuid, f["uuid"])
+        for (sym, prop) in pairs(community.abm.parameters)
+            community.parameters[sym] = f["times/$tlast/parameters/$sym"]
         end
 
-        #Base parameters
-        times = sort([Meta.parse(i) for i in keys(f["times"])])[1:end-1]
-        for t in times
-            com = Community(abm,
-                id = f["times/$t/id"],
-                N = f["times/$t/N"],
-                NMedium = f["times/$t/NMedium"],
-                t = f["times/$t/t"],
-                dt = f["times/$t/dt"],
-                simBox = f["times/$t/simBox"],
-                platform = f["platform/platform"],#eval(Meta.parse("CellBasedModels.$(f["platform/platform"])()")),
-                agentAlg = f["agentAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["agentAlg/alg"])()")),
-                agentSolveArgs = f["agentAlg/args"],
-                modelAlg = f["modelAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["modelAlg/alg"])()")),
-                modelSolveArgs = f["modelAlg/args"],
-                mediumAlg = f["mediumAlg/alg"],#eval(Meta.parse("CellBasedModels.$(f["mediumAlg/alg"])()")),
-                mediumSolveArgs = f["mediumAlg/args"],
+        # 3) Reconstruir tiempos pasados
+        times_sym = sort([Meta.parse(i) for i in keys(f["times"])])[1:end-1]
+        for tt in times_sym
+            com = Community(
+                abm;
+                id      = f["times/$tt/id"],
+                N       = f["times/$tt/N"],
+                NMedium = f["times/$tt/NMedium"],
+                t       = f["times/$tt/t"],
+                dt      = f["times/$tt/dt"],
+                simBox  = f["times/$tt/simBox"],
             )
-            for (sym,prop) in pairs(community.abm.parameters)
-                com.parameters[sym] = f["times/$t/parameters/$sym"]
+            for (sym, prop) in pairs(community.abm.parameters)
+                com.parameters[sym] = f["times/$tt/parameters/$sym"]
             end
-    
             push!(community.pastTimes, com)
         end
 
-        setfield!(community,:loaded,false)
-
+        setfield!(community, :loaded, false)
         return community
     end
-
 end
