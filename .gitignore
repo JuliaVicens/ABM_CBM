@@ -14,3 +14,5 @@ test/testfiles/*
 *.png
 *.mp4
 *.txt
+*.png
+*.svg
