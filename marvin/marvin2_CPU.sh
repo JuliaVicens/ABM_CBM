@@ -1,6 +1,6 @@
 #!/bin/bash
-#SBATCH --job-name=pgaCPU
-#SBATCH --cpus-per-task=16
+#SBATCH --job-name=lf
+#SBATCH --cpus-per-task=32
 #SBATCH --mem=32G
 ##SBATCH --time=24:00:00
 #SBATCH --output=notebook-%j.out
@@ -27,10 +27,10 @@ echo "📦 Jupyter version:"
 jupyter --version
 
 # Definir rutas del notebook
-NOTEBOOK="../proves/PGA_agents/QS_dependent/Bacteries_QS.ipynb"
-OUTPUT="../proves/PGA_agents/QS_dependent/Bacteries_QS_marvin_sigma_5e2.ipynb"
+NOTEBOOK="../proves/Tod's/marvin/lessfriction/Tracking_c.ipynb"
+OUTPUT="../proves/Tod's/marvin/lessfriction/Tracking_c_marvin.ipynb"
 
-export JULIA_NUM_THREADS=32
+export JULIA_NUM_THREADS=64
 # Ejecutar el notebook con kernel explícito
 echo "🚀 Ejecutando notebook: $NOTEBOOK"
 jupyter nbconvert --to notebook --execute "$NOTEBOOK" --output "$OUTPUT" \
