@@ -27,14 +27,10 @@ echo "📦 Jupyter version:"
 jupyter --version
 
 # Definir rutas del notebook
-<<<<<<< HEAD
 
-NOTEBOOK="../proves/PGA_agents/QS_dependent/Bacteries_QS.ipynb"
-OUTPUT="/scratch/jvicens/pgaCPU/Bacteries_QS_marvin_sigma_5e2.ipynb"
-=======
-NOTEBOOK="../proves/Tod's/marvin/lessfriction/Tracking_c.ipynb"
-OUTPUT="../proves/Tod's/marvin/lessfriction/Tracking_c_marvin.ipynb"
->>>>>>> 624a1900305565e38c042aca94397b32ce719dd1
+/homes/users/jvicens/ABM_CBM/proves/
+NOTEBOOK="../proves/Tod's/attraction/prove/Tracking_c.ipynb"
+OUTPUT="/gpfs/scratch/lab_ojalvo/jvicens/prove/motiles.ipynb"
 
 export JULIA_NUM_THREADS=64
 # Ejecutar el notebook con kernel explícito
