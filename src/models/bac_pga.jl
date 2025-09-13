@@ -105,6 +105,47 @@ function repulsiveForces_rods(
 
 end
 
+function repulsiveForces_as_rods(
+    x,y,d,l,theta,
+    x2,y2,d2,l2,theta2,eta, E, A)
+
+    Fasx = 0.
+    Fasy = 0.
+    Wij = 0.
+
+
+    #Function that finds the virtual spheres of contact between both rods
+    xiAux,yiAux,xjAux,yjAux = CBMMetrics.rodIntersection(x,y,l,theta,x2,y2,l2,theta2)
+   
+    c=cos(theta)
+    s=sin(theta)
+    #Compute distance between virtual spheres
+    rij = sqrt((xiAux-xjAux)^2 +(yiAux-yjAux)^2)
+
+    mu_par  = 1/(eta*A)   # μ∥
+    mu_perp = A/eta       # μ⊥
+    
+    if rij > 0. && rij < (d+d2)/2. #If it is smaller than a diameter compute forces
+        #Compute auxiliar
+        hAux = (d+d2)/2. - rij
+        #Compute direction
+        nijx = (xiAux-xjAux)/rij
+        nijy = (yiAux-yjAux)/rij
+    
+        FnAux = E * sqrt(d2* hAux^3)  /  (l + d)
+           
+        Fijx = FnAux * nijx
+        Fijy = FnAux * nijy
+        Fasx = (mu_par*c^2 + mu_perp*s^2)*Fijx + (mu_par - mu_perp)*c*s*Fijy
+        Fasy = (mu_par - mu_perp)*c*s*Fijx     + (mu_par*s^2 + mu_perp*c^2)*Fijy
+        Wij = ((xiAux-x)*Fijy - (yiAux-y)*Fijx) * 12. / (eta/A*(l + d)^2)
+      
+    end
+
+    return Fasx, Fasy, Wij
+
+end
+
 function attractiveForces_rods(
     x,y,d,l,theta,
     x2,y2,d2,l2,theta2,eta, eps)
