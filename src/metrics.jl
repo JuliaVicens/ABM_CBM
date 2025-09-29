@@ -246,3 +246,166 @@ module CBMMetrics
     end
     
 end
+
+
+# ===== utilidades comunes (simples) =====
+@inline dot3(a,b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+@inline sub3(a,b) = (a[1]-b[1], a[2]-b[2], a[3]-b[3])
+@inline add3(a,b) = (a[1]+b[1], a[2]+b[2], a[3]+b[3])
+@inline mul3(s,a) = (s*a[1], s*a[2], s*a[3])
+@inline norm3(a) = sqrt(dot3(a,a))
+
+# acimut-elevación -> vector unitario
+@inline function dir_from_angles(theta, phi)
+    cφ = cos(phi)
+    (cφ*cos(theta), cφ*sin(theta), sin(phi))
+end
+
+# proyección de P sobre la recta (O + t u), u unitario
+@inline function project_point_on_line(P, O, u)
+    t = dot3(sub3(P,O), u)
+    add3(O, mul3(t,u)), t
+end
+
+# ===== 1) intersection2lines -> 3D (devuelve UN punto como el original) =====
+"""
+    intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2; tol=1e-7, inf_eff=1e5)
+
+Intersección de dos rectas en 3D siguiendo la filosofía 2D original:
+- Si se cruzan, devuelve el punto de cruce.
+- Si son alabeadas (no se cortan), devuelve el **punto medio** de los puntos más cercanos.
+- Si son (casi) paralelas, devuelve el **punto medio de los centros** (igual que tu 2D).
+
+Retorna: (px, py, pz)
+"""
+function intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2; tol=1e-7, inf_eff=1e5)
+    O1 = (x1,y1,z1); u1 = dir_from_angles(theta1, phi1)
+    O2 = (x2,y2,z2); u2 = dir_from_angles(theta2, phi2)
+
+    r  = sub3(O1,O2)
+    a  = 1.0
+    b  = dot3(u1,u2)
+    c  = 1.0
+    d  = dot3(u1,r)
+    e  = dot3(u2,r)
+    den = a*c - b*b
+
+    if abs(den) > tol
+        t = (b*e - c*d)/den
+        s = (a*e - b*d)/den
+        P1 = add3(O1, mul3(t,u1))
+        P2 = add3(O2, mul3(s,u2))
+        # si realmente se cruzan, P1≈P2; devolvemos el medio igualmente
+        Pm = mul3(0.5, add3(P1,P2))
+        return Pm[1], Pm[2], Pm[3]
+    else
+        # paralelas o casi: como en tu 2D, el "punto al infinito" lo sustituimos por el medio de centros
+        px = (x1 + x2)/2
+        py = (y1 + y2)/2
+        pz = (z1 + z2)/2
+        return px, py, pz
+    end
+end
+
+# ===== 2) point2line -> 3D =====
+"""
+    point2line3d(x1,y1,z1, x2,y2,z2, theta2,phi2)
+
+Proyecta el punto (x1,y1,z1) sobre la recta que pasa por (x2,y2,z2)
+con dirección (theta2,phi2). Devuelve las coords del punto proyectado.
+"""
+function point2line3d(x1,y1,z1, x2,y2,z2, theta2,phi2)
+    P = (x1,y1,z1)
+    O = (x2,y2,z2)
+    u = dir_from_angles(theta2, phi2)
+    Q,_ = project_point_on_line(P, O, u)
+    return Q[1], Q[2], Q[3]
+end
+
+# ===== 3) pointInsideRod -> 3D (misma lógica que tu 2D) =====
+"""
+    pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, px,py,pz, separation)
+
+Igual que tu versión 2D: asume que (px,py,pz) está sobre la misma recta (o cerca),
+coge el vector desde el centro al punto y lo recorta a longitud l1/2, aplicando `separation`.
+"""
+function pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, px,py,pz, separation)
+    # nota: theta1,phi1 no se usan aquí, igual que en tu 2D
+    di = max(norm3((x1-px, y1-py, z1-pz)), 1e-8)
+    dxi = (px - x1)/di
+    dyi = (py - y1)/di
+    dzi = (pz - z1)/di
+    scale = separation * min(di, l1/2)
+    return x1 + scale*dxi, y1 + scale*dyi, z1 + scale*dzi
+end
+
+# ===== 4) rodIntersection -> 3D (estructura de casos como el original) =====
+"""
+    rodIntersection3d(x1,y1,z1,l1,theta1,phi1, x2,y2,z2,l2,theta2,phi2; separation=0.99, tol=1e-6)
+
+Mismo flujo que tu 2D:
+- Calcula un "punto de intersección" de direcciones extendidas (en 3D: el medio de los más cercanos).
+- Comprueba si cae dentro de cada segmento por distancia al centro (di,dj).
+- Maneja paralelas con proyecciones y recortes usando `pointInsideRod3d`.
+
+Devuelve: (x1Aux,y1Aux,z1Aux, x2Aux,y2Aux,z2Aux)
+"""
+function rodIntersection3d(x1,y1,z1,l1,theta1,phi1,
+                           x2,y2,z2,l2,theta2,phi2; separation=0.99, tol=1e-6)
+
+    # por compatibilidad con tu patrón
+    x1Aux = x1; y1Aux = y1; z1Aux = z1
+    x2Aux = x2; y2Aux = y2; z2Aux = z2
+
+    # 1) "intersección" (medio de puntos más cercanos o medio de centros si paralelas)
+    pxAux, pyAux, pzAux = intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2; tol=tol)
+
+    # 2) distancias desde cada centro a ese punto
+    di = sqrt((x1 - pxAux)^2 + (y1 - pyAux)^2 + (z1 - pzAux)^2)
+    dj = sqrt((x2 - pxAux)^2 + (y2 - pyAux)^2 + (z2 - pzAux)^2)
+
+    # "normAux" 3D análogo a determinante 2D: si direcciones casi paralelas -> 0
+    u1 = dir_from_angles(theta1, phi1)
+    u2 = dir_from_angles(theta2, phi2)
+    parallelish = (1 - abs(dot3(u1,u2))) < 1e-7  # |u1·u2|≈1
+
+    if parallelish
+        # proyecta pxAux en cada eje y recorta dentro del segmento
+        x1Aux,y1Aux,z1Aux = point2line3d(pxAux,pyAux,pzAux, x1,y1,z1, theta1,phi1)
+        x1Aux,y1Aux,z1Aux = pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, x1Aux,y1Aux,z1Aux, separation)
+
+        x2Aux,y2Aux,z2Aux = point2line3d(pxAux,pyAux,pzAux, x2,y2,z2, theta2,phi2)
+        x2Aux,y2Aux,z2Aux = pointInsideRod3d(x2,y2,z2, l2, theta2,phi2, x2Aux,y2Aux,z2Aux, separation)
+
+    elseif di <= l1/2 && dj <= l2/2
+        # el punto medio de las rectas cae "dentro" de ambos rods por distancia a centros
+        x1Aux,y1Aux,z1Aux = pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, pxAux,pyAux,pzAux, separation)
+        x2Aux,y2Aux,z2Aux = pointInsideRod3d(x2,y2,z2, l2, theta2,phi2, pxAux,pyAux,pzAux, separation)
+
+    elseif di <= l1/2 && dj > l2/2
+        x2Aux,y2Aux,z2Aux = pointInsideRod3d(x2,y2,z2, l2, theta2,phi2, pxAux,pyAux,pzAux, separation)
+        x1Aux,y1Aux,z1Aux = point2line3d(x2Aux,y2Aux,z2Aux, x1,y1,z1, theta1,phi1)
+
+    elseif di > l1/2 && dj <= l2/2
+        x1Aux,y1Aux,z1Aux = pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, pxAux,pyAux,pzAux, separation)
+        x2Aux,y2Aux,z2Aux = point2line3d(x1Aux,y1Aux,z1Aux, x2,y2,z2, theta2,phi2)
+
+    else
+        # ambos fuera: sigue tu lógica de "intenta con uno, comprueba el otro"
+        x2Aux,y2Aux,z2Aux = pointInsideRod3d(x2,y2,z2, l2, theta2,phi2, pxAux,pyAux,pzAux, separation)
+        x1Aux,y1Aux,z1Aux = point2line3d(x2Aux,y2Aux,z2Aux, x1,y1,z1, theta1,phi1)
+
+        dj2 = sqrt((x1 - x1Aux)^2 + (y1 - y1Aux)^2 + (z1 - z1Aux)^2)
+        if dj2 > l1/2
+            x1Aux,y1Aux,z1Aux = pointInsideRod3d(x1,y1,z1, l1, theta1,phi1, pxAux,pyAux,pzAux, separation)
+            x2Aux_,y2Aux_,z2Aux_ = point2line3d(x1Aux,y1Aux,z1Aux, x2,y2,z2, theta2,phi2)
+
+            dj3 = sqrt((x2 - x2Aux_)^2 + (y2 - y2Aux_)^2 + (z2 - z2Aux_)^2)
+            if dj3 < l2/2
+                x2Aux,y2Aux,z2Aux = x2Aux_,y2Aux_,z2Aux_
+            end
+        end
+    end
+
+    return x1Aux,y1Aux,z1Aux, x2Aux,y2Aux,z2Aux
+end
