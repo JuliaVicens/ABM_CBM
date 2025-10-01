@@ -394,6 +394,89 @@ function attractiveForces_rods_yukawa3d(
 end
 
 
+# --- Atracción bacteria–sustrato (Yukawa) para un rod en 3D ---
+#   U_cs(h) = eps_cs * exp(gamma*(h - h0)) / (h - h0)
+#   Fz = -dU/dh  (dirección -z; aquí el signo sale de la derivada)
+#
+# Parámetros:
+#   eta      : factor de reescalado viscoso (como en tu código)
+#   eps_cs   : profundidad (debe ser NEGATIVA si quieres atracción estricta como en el paper)
+#   gamma    : parámetro de decaimiento
+#   h0       : posición efectiva del "sustrato" en la métrica de h (paper)
+#   rcut_h   : (opcional) corte de alcance en h para eficiencia
+#
+function substrateAttraction_rods_yukawa3d(
+    x,y,z,d,l,theta,phi,
+    eta, eps_cs, gamma, h0; rcut_h = 5.0
+)
+    a = 0.5*d
+    (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
+
+    # Acumuladores
+    Fx = 0.0; Fy = 0.0; Fz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    # Recorremos polos (aproximación por extremos del esferocilindro)
+    for pole in 1:2
+        xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
+
+        # gap h = distancia "libre" polo–plano menos el radio a
+        #   s = zp  (altura del polo)
+        #   h = s - a
+        s  = zp
+        h  = s - a
+
+        # Solo aporta si está por encima del plano efectivo (h > h0)
+        # y dentro de un corte razonable
+        if h > h0
+            Δh = h - h0
+            if Δh < rcut_h
+                # f(h) = exp(gamma*(h-h0)) / (h-h0)
+                # dU/dh = eps_cs * f * (gamma - 1/(h-h0))
+                # F = -dU/dh  (hacia -z si dU/dh > 0)
+                f     = exp(gamma * Δh) / (Δh)
+                dUdh  = eps_cs * f * (gamma - 1.0/Δh)
+                Fmag  = - dUdh / (eta * (l + d))   # reescalado consistente
+
+                # Fuerza solo en z (hacia el sustrato si Fmag < 0)
+                Fx_p, Fy_p, Fz_p = 0.0, 0.0, Fmag
+                Fx += Fx_p; Fy += Fy_p; Fz += Fz_p
+
+                # Par respecto al CM: r × F
+                rx = xp - x; ry = yp - y; rz = zp - z
+                τx += ry*Fz_p - rz*Fy_p
+                τy += rz*Fx_p - rx*Fz_p
+                τz += rx*Fy_p - ry*Fx_p
+            end
+        end
+    end
+
+    # --- Proyección del par a (θ, φ) ---
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    # sθ = u × du/dθ
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    # sφ = u × du/dφ
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    # Mismo factor de escala que usas en el resto del código
+    scale = 12.0 / ((l + d)^2)
+    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fx, Fy, Fz, Wθ, Wφ
+end
+
 # --- Fuerzas de pared y pili en 3D para un rod ---
 
 function wallForces_rods_bond3d(
