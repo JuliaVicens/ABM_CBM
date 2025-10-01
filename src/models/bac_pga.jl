@@ -1,3 +1,29 @@
+# --- derivadas del eje u respecto a los ángulos ---
+# u = (cosφ cosθ, cosφ sinθ, sinφ)
+@inline function du_dtheta(theta, phi)
+    (-cos(phi)*sin(theta),  cos(phi)*cos(theta),  0.0)
+end
+@inline function du_dphi(theta, phi)
+    (-sin(phi)*cos(theta), -sin(phi)*sin(theta),  cos(phi))
+end
+
+@inline dot3(a,b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+
+
+# --- Utilidades de orientación y polos (orden fijo: + y −) ---
+@inline function rod_dir3d(theta, phi)
+    cx = cos(theta); sx = sin(theta)
+    cp = cos(phi);   sp = sin(phi)
+    return (cx*cp, sx*cp, sp)               # u = (cosθ cosφ, sinθ cosφ, sinφ)
+end
+
+
+@inline function rod_poles3d_ordered(x,y,z,l,theta,phi)
+    ux,uy,uz = rod_dir3d(theta, phi)
+    hx,hy,hz = 0.5l*ux, 0.5l*uy, 0.5l*uz
+    return (x+hx, y+hy, z+hz), (x-hx, y-hy, z-hz)  # (+, −)
+end
+
 """
     repulsiveForces(
         x, y, d, l, theta, etab, type,
@@ -105,16 +131,7 @@ function repulsiveForces_rods(
 
 end
 
-# Helpers mínimos
-@inline dot3(a,b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
 
-# d u / dtheta y d u / dphi para u = (cosφ cosθ, cosφ sinθ, sinφ)
-@inline function du_dtheta(theta, phi)
-    (-cos(phi)*sin(theta),  cos(phi)*cos(theta),  0.0)
-end
-@inline function du_dphi(theta, phi)
-    (-sin(phi)*cos(theta), -sin(phi)*sin(theta),  cos(phi))
-end
 
 function repulsiveForces_rods3d(
     x,y,z,d,l,theta,phi,
@@ -125,7 +142,7 @@ function repulsiveForces_rods3d(
 
     # 1) Puntos de "contacto" (más cercanos) sobre cada segmento
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        rodIntersection3d(x, y, z, l, theta, phi,
+        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
                           x2, y2, z2, l2, theta2, phi2; separation=0.99)
 
     # 2) Distancia y normal j->i
@@ -155,12 +172,30 @@ function repulsiveForces_rods3d(
         τz = rx*Fijy - ry*Fijx
 
         # 4) Proyección en las direcciones generalizadas (d u / dθ, d u / dφ)
-        duθ = du_dtheta(theta, phi)
-        duφ = du_dphi(theta, phi)
+        # u(θ,φ)
+        ux =  cos(theta)*cos(phi)
+        uy =  sin(theta)*cos(phi)
+        uz =  sin(phi)
 
-        scale = 12.0 / ((l + d)^2)  # mismo factor que usabas en 2D
-        Wijtheta = scale * (τx*duθ[1] + τy*duθ[2] + τz*duθ[3])
-        Wijphi   = scale * (τx*duφ[1] + τy*duφ[2] + τz*duφ[3])
+        # du/dθ y du/dφ (tus funciones)
+        duθx, duθy, duθz = du_dtheta(theta, phi)
+        duφx, duφy, duφz = du_dphi(theta,  phi)
+
+        # sθ = u × du/dθ
+        sθx = uy*duθz - uz*duθy
+        sθy = uz*duθx - ux*duθz
+        sθz = ux*duθy - uy*duθx
+
+        # sφ = u × du/dφ
+        sφx = uy*duφz - uz*duφy
+        sφy = uz*duφx - ux*duφz
+        sφz = ux*duφy - uy*duφx
+
+        # Proyección correcta del par
+        scale = 12.0 / ((l + d)^2)
+        Wijtheta = scale * (τx*sθx + τy*sθy + τz*sθz)
+        Wijphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
+
     end
 
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
@@ -283,16 +318,6 @@ function attractiveForces_rods_yukawa(
     return Fijx, Fijy, Wij
 end
 
-# --- derivadas del eje u respecto a los ángulos ---
-# u = (cosφ cosθ, cosφ sinθ, sinφ)
-@inline function du_dtheta(theta, phi)
-    (-cos(phi)*sin(theta),  cos(phi)*cos(theta),  0.0)
-end
-@inline function du_dphi(theta, phi)
-    (-sin(phi)*cos(theta), -sin(phi)*sin(theta),  cos(phi))
-end
-
-@inline dot3(a,b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
 
 function attractiveForces_rods_yukawa3d(
     x,y,z,d,l,theta,phi,
@@ -302,36 +327,32 @@ function attractiveForces_rods_yukawa3d(
     Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
     Wijtheta = 0.0; Wijphi = 0.0
 
-    # 1) Puntos de "contacto" (más cercanos) sobre cada segmento
-    #    Sustituye por tu espacio de nombres si procede: CBMMetrics.rodIntersection3d(...)
+    # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        rodIntersection3d(x, y, z, l, theta, phi,
-                          x2, y2, z2, l2, theta2, phi2; separation=0.99)
+        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
+                                     x2, y2, z2, l2, theta2, phi2; separation=0.99)
 
-    # 2) Distancia entre "esferas" virtuales y dirección j->i
+    # 2) Vector y distancia j->i
     dx = xiAux - xjAux
     dy = yiAux - yjAux
     dz = ziAux - zjAux
     rij = sqrt(dx*dx + dy*dy + dz*dz)
 
-    σ = 0.5*(d + d2)
-    rcut = 5σ
+    σ    = 0.5*(d + d2)
+    rcut = 5*σ
 
     if rij > σ && rij < rcut
-        # Dirección normal
+        # Dirección normal n̂ (j -> i)
         nijx = dx/rij
         nijy = dy/rij
         nijz = dz/rij
 
-        # 3) Fuerza Yukawa ATRACTIVA (eps>0 -> atracción)
+        # 3) Fuerza Yukawa ATRACTIVA:
         #    u(r) = eps * exp(-γ (r-σ)) / r
-        #    F = -∂u/∂r * n   => magnitud:
-        #    ∂u/∂r = eps * exp(-γ(r-σ)) * (-γ*r - 1) / r^2
-        #    -∂u/∂r = eps * exp(-γ(r-σ)) * (γ*r + 1) / r^2  (esto sería REPULSIVA)
-        #    Para que sea atractiva, invertimos el signo:
+        #    F = -∂u/∂r n̂  => magnitud atractiva con signo negativo delante
         Fmag = - eps * exp(-gamma*(rij - σ)) * (gamma*rij + 1.0) / (rij^2)
 
-        # Reescalado como en tu versión
+        # Reescalado efectivo (consistente con tus otras fuerzas)
         Fmag /= (eta * (l + d))
 
         # Fuerza sobre i
@@ -339,20 +360,140 @@ function attractiveForces_rods_yukawa3d(
         Fijy = Fmag * nijy
         Fijz = Fmag * nijz
 
-        # 4) Torque en el centro de i: τ = r_i × F_ij
+        # 4) Par en el CM de i: τ = r × F
         rx = (xiAux - x); ry = (yiAux - y); rz = (ziAux - z)
         τx = ry*Fijz - rz*Fijy
         τy = rz*Fijx - rx*Fijz
         τz = rx*Fijy - ry*Fijx
 
-        # 5) Proyección del torque en las direcciones generalizadas (θ, φ)
-        duθ = du_dtheta(theta, phi)
-        duφ = du_dphi(theta,  phi)
+        # 5) Proyección CORRECTA a (θ, φ):
+        #    Wq = τ · (u × ∂u/∂q)
+        ux =  cos(theta)*cos(phi)
+        uy =  sin(theta)*cos(phi)
+        uz =  sin(phi)
+
+        duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+        duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+        # sθ = u × du/dθ
+        sθx = uy*duθ[3] - uz*duθ[2]
+        sθy = uz*duθ[1] - ux*duθ[3]
+        sθz = ux*duθ[2] - uy*duθ[1]
+
+        # sφ = u × du/dφ
+        sφx = uy*duφ[3] - uz*duφ[2]
+        sφy = uz*duφ[1] - ux*duφ[3]
+        sφz = ux*duφ[2] - uy*duφ[1]
 
         scale = 12.0 / ((l + d)^2)
-        Wijtheta = scale * (τx*duθ[1] + τy*duθ[2] + τz*duθ[3])
-        Wijphi   = scale * (τx*duφ[1] + τy*duφ[2] + τz*duφ[3])
+        Wijtheta = scale * (τx*sθx + τy*sθy + τz*sθz)
+        Wijphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
     end
 
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
+end
+
+
+# --- Fuerzas de pared y pili en 3D para un rod ---
+
+function wallForces_rods_bond3d(
+    x,y,z,d,l,theta,phi,
+    eta, Ebv,
+    kb, Δ0, Δmax, T_eng,hax,
+    xpili1::Float64, ypili1::Float64, t_pili1::Int,
+    xpili2::Float64, ypili2::Float64, t_pili2::Int
+)
+    a = 0.5*d
+    (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
+
+    # Acumuladores netos
+    Fx = 0.0; Fy = 0.0; Fz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    for pole in 1:2
+        xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
+        xpili = pole == 1 ? xpili1 : xpili2
+        ypili = pole == 1 ? ypili1 : ypili2
+        t_pili = pole == 1 ? t_pili1 : t_pili2
+
+        s = zp
+        δ = a - s
+
+        # --- Repulsión suelo (esfera–plano) ---
+        if δ > 0.0
+            Fh = Ebv * sqrt(d * δ^3) / (eta * (l + d))
+            # Fuerza en el polo: (0,0,Fh)
+            Fx += 0.0; Fy += 0.0; Fz += Fh
+            # Par respecto al CM: r × F
+            rx = xp - x; ry = yp - y; rz = zp - z
+            τx += ry*Fh - rz*0.0
+            τy += rz*0.0 - rx*Fh
+            τz += rx*0.0 - ry*0.0
+        end
+
+        # --- PILI ---
+        if t_pili < 0 # Enganchado
+            xa, ya, za = xpili, ypili, 0.0
+            dx = xp - xa; dy = yp - ya; dz = zp - za
+            Δ = sqrt(dx*dx + dy*dy + dz*dz)
+            if Δ > 1e-12
+                Fspr = -kb * (Δ - Δ0)
+                if (Δ > Δmax) 
+                    t_pili = 0; xpili = NaN; ypili = NaN
+                else
+                    Fx_p = Fspr * (dx/Δ) / (eta * (l + d))
+                    Fy_p = Fspr * (dy/Δ) / (eta * (l + d))
+                    Fz_p = Fspr * (dz/Δ) / (eta * (l + d))
+                    Fx += Fx_p; Fy += Fy_p; Fz += Fz_p
+                    rx = xp - x; ry = yp - y; rz = zp - z
+                    τx += ry*Fz_p - rz*Fy_p
+                    τy += rz*Fx_p - rx*Fz_p
+                    τz += rx*Fy_p - ry*Fx_p
+                end
+            end
+
+        else  # No enganchado, contando tiempo
+            if (s - a) < hax
+                if t_pili >= T_eng
+                    t_pili = -1; xpili = xp; ypili = yp
+                else
+                    t_pili += 1
+                end
+            else
+                t_pili = 0
+            end
+        end
+
+        if pole==1
+            xpili1=xpili; ypili1=ypili; t_pili1=t_pili
+        else
+            xpili2=xpili; ypili2=ypili; t_pili2=t_pili
+        end
+    end
+
+    # --- Proyección correcta del par a (θ, φ) ---
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    # sθ = u × du/dθ
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    # sφ = u × du/dφ
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    scale = 12.0 / ((l + d)^2)
+    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fx, Fy, Fz, Wθ, Wφ,
+           xpili1, ypili1, t_pili1,
+           xpili2, ypili2, t_pili2
 end
