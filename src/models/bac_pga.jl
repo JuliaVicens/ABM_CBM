@@ -407,9 +407,9 @@ end
 #
 function substrateAttraction_rods_yukawa3d(
     x,y,z,d,l,theta,phi,
-    eta, eps_cs, gamma, h0; rcut_h = 5.0
+    eta, eps_cs, gamma; rcut_h = 5.0
 )
-    a = 0.5*d
+    a = 0 #plano
     (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
 
     # Acumuladores
@@ -428,8 +428,8 @@ function substrateAttraction_rods_yukawa3d(
 
         # Solo aporta si está por encima del plano efectivo (h > h0)
         # y dentro de un corte razonable
-        if h > h0
-            Δh = h - h0
+        if h > 0
+            Δh = h 
             if Δh < rcut_h
                 # f(h) = exp(gamma*(h-h0)) / (h-h0)
                 # dU/dh = eps_cs * f * (gamma - 1/(h-h0))
@@ -481,7 +481,7 @@ function substrateRepulsion_rods3d(
     x,y,z,d,l,theta,phi,
     eta, Ebv
 )
-    a = 0.5*d
+    a = 0
     (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
 
     # Acumuladores netos
@@ -492,7 +492,7 @@ function substrateRepulsion_rods3d(
         xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
 
         s = zp
-        δ = a - s
+        δ = a + d/2 - s
 
         # --- Repulsión suelo (esfera–plano) ---
         if δ > 0.0
