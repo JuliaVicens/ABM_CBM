@@ -477,6 +477,63 @@ function substrateAttraction_rods_yukawa3d(
     return Fx, Fy, Fz, Wθ, Wφ
 end
 
+function substrateRepulsion_rods3d(
+    x,y,z,d,l,theta,phi,
+    eta, Ebv
+)
+    a = 0.5*d
+    (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
+
+    # Acumuladores netos
+    Fx = 0.0; Fy = 0.0; Fz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    for pole in 1:2
+        xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
+
+        s = zp
+        δ = a - s
+
+        # --- Repulsión suelo (esfera–plano) ---
+        if δ > 0.0
+            Fh = Ebv * sqrt(d * δ^3) / (eta * (l + d))
+            # Fuerza en el polo: (0,0,Fh)
+            Fx += 0.0; Fy += 0.0; Fz += Fh
+            # Par respecto al CM: r × F
+            rx = xp - x; ry = yp - y; rz = zp - z
+            τx += ry*Fh - rz*0.0
+            τy += rz*0.0 - rx*Fh
+            τz += rx*0.0 - ry*0.0
+        end
+
+    end
+
+    # --- Proyección correcta del par a (θ, φ) ---
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    # sθ = u × du/dθ
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    # sφ = u × du/dφ
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    scale = 12.0 / ((l + d)^2)
+    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fx, Fy, Fz, Wθ, Wφ
+end
+
+
 # --- Fuerzas de pared y pili en 3D para un rod ---
 
 function wallForces_rods_bond3d(
