@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=lf
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=16
 #SBATCH --mem=32G
 ##SBATCH --time=24:00:00
 #SBATCH --output=notebook-%j.out
@@ -32,9 +32,9 @@ mkdir -p "$JOB_DIR"
 # ----------------------------
 # 2) Notebook origen y nombres
 # ----------------------------
-SRC_NOTEBOOK="/homes/users/jvicens/ABM_CBM/proves/Tod's/attraction/prove/Tracking_c.ipynb"
+SRC_NOTEBOOK="/homes/users/jvicens/ABM_CBM/proves/Biofilm_dispersion/attraction/less friction growth fast PGA/v2/fixed/Tracking_c.ipynb"
 RUN_NOTEBOOK="$JOB_DIR/Tracking_c.ipynb"                # copia que se ejecuta
-OUT_NAME="motiles_few.ipynb"                   # nombre del ipynb de salida
+OUT_NAME="low1000v.ipynb"                   # nombre del ipynb de salida
 
 # Copiar notebook al scratch
 cp -f "$SRC_NOTEBOOK" "$RUN_NOTEBOOK"
@@ -43,7 +43,7 @@ cp -f "$SRC_NOTEBOOK" "$RUN_NOTEBOOK"
 cd "$JOB_DIR" || exit 1
 
 # Hilos Julia coherentes con cpus-per-task
-export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:-64}
+export JULIA_NUM_THREADS=${SLURM_CPUS_PER_TASK:-32}
 echo "🧵 JULIA_NUM_THREADS=$JULIA_NUM_THREADS"
 
 # ----------------------------
