@@ -278,7 +278,7 @@ module CBMMetrics
 
     Retorna: (px, py, pz)
     """
-    function intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2; tol=1e-7, inf_eff=1e5)
+    function intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2,tol)
         O1 = (x1,y1,z1); u1 = dir_from_angles(theta1, phi1)
         O2 = (x2,y2,z2); u2 = dir_from_angles(theta2, phi2)
 
@@ -352,14 +352,15 @@ module CBMMetrics
     """
 
     function rodIntersection3d(x1,y1,z1,l1,theta1,phi1,
-                            x2,y2,z2,l2,theta2,phi2; separation=0.99, tol=1e-6)
+                            x2,y2,z2,l2,theta2,phi2)
 
         # por compatibilidad con tu patrón
         x1Aux = x1; y1Aux = y1; z1Aux = z1
         x2Aux = x2; y2Aux = y2; z2Aux = z2
-
+        tol=1e-6
+        separation=0.99
         # 1) "intersección" (medio de puntos más cercanos o medio de centros si paralelas)
-        pxAux, pyAux, pzAux = intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2; tol=tol)
+        pxAux, pyAux, pzAux = intersection2lines3d(x1,y1,z1,theta1,phi1, x2,y2,z2,theta2,phi2,tol)
 
         # 2) distancias desde cada centro a ese punto
         di = sqrt((x1 - pxAux)^2 + (y1 - pyAux)^2 + (z1 - pzAux)^2)

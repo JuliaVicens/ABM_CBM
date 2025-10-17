@@ -143,7 +143,7 @@ function repulsiveForces_rods3d(
     # 1) Puntos de "contacto" (más cercanos) sobre cada segmento
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
         CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
-                          x2, y2, z2, l2, theta2, phi2; separation=0.99)
+                          x2, y2, z2, l2, theta2, phi2)
 
     # 2) Distancia y normal j->i
     dx = xiAux - xjAux
@@ -330,7 +330,7 @@ function attractiveForces_rods_yukawa3d(
     # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
         CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
-                                     x2, y2, z2, l2, theta2, phi2; separation=0.99)
+                                     x2, y2, z2, l2, theta2, phi2)
 
     # 2) Vector y distancia j->i
     dx = xiAux - xjAux
@@ -409,7 +409,7 @@ function substrateAttraction_rods_yukawa3d(
     x,y,z,d,l,theta,phi,
     eta, eps_cs, gamma; rcut_h = 5.0
 )
-    a = 0 #plano
+    a = 0 # plano en z=0
     (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
 
     # Acumuladores
@@ -424,7 +424,7 @@ function substrateAttraction_rods_yukawa3d(
         #   s = zp  (altura del polo)
         #   h = s - a
         s  = zp
-        h  = s - a
+        h  = s - a + d/2
 
         # Solo aporta si está por encima del plano efectivo (h > h0)
         # y dentro de un corte razonable
@@ -533,6 +533,62 @@ function substrateRepulsion_rods3d(
     return Fx, Fy, Fz, Wθ, Wφ
 end
 
+
+function padRepulsion_rods3d(
+    x,y,z,d,l,theta,phi,
+    eta, Ebp, hPad
+)
+    a = hPad
+    (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
+
+    # Acumuladores netos
+    Fx = 0.0; Fy = 0.0; Fz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    for pole in 1:2
+        xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
+
+        s = zp
+        δ = s + d/2 -a
+
+        # --- Repulsión pad (esfera–plano) ---
+        if δ > 0.0
+            Fh = -Ebp * sqrt(d * δ^3) / (eta * (l + d)) # negativo: hacia -z
+            # Fuerza en el polo: (0,0,Fh)
+            Fx += 0.0; Fy += 0.0; Fz +=  Fh
+            # Par respecto al CM: r × F
+            rx = xp - x; ry = yp - y; rz = zp - z
+            τx += ry*Fh - rz*0.0
+            τy += rz*0.0 - rx*Fh
+            τz += rx*0.0 - ry*0.0
+        end
+
+    end
+
+    # --- Proyección correcta del par a (θ, φ) ---
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    # sθ = u × du/dθ
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    # sφ = u × du/dφ
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    scale = 12.0 / ((l + d)^2)
+    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fx, Fy, Fz, Wθ, Wφ
+end
 
 # --- Fuerzas de pared y pili en 3D para un rod ---
 
