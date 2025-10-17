@@ -143,7 +143,7 @@ function repulsiveForces_rods3d(
     # 1) Puntos de "contacto" (más cercanos) sobre cada segmento
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
         CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
-                          x2, y2, z2, l2, theta2, phi2; separation=0.99)
+                          x2, y2, z2, l2, theta2, phi2)
 
     # 2) Distancia y normal j->i
     dx = xiAux - xjAux
@@ -330,7 +330,7 @@ function attractiveForces_rods_yukawa3d(
     # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
         CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
-                                     x2, y2, z2, l2, theta2, phi2; separation=0.99)
+                                     x2, y2, z2, l2, theta2, phi2)
 
     # 2) Vector y distancia j->i
     dx = xiAux - xjAux
