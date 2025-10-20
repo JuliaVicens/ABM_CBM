@@ -533,6 +533,138 @@ function substrateRepulsion_rods3d(
     return Fx, Fy, Fz, Wθ, Wφ
 end
 
+function padRepulsion_rods_point_3d(
+    x,y,z, xp, yp, zp, d,l,theta,phi,
+    eta, Ebp, hPad
+)
+    a = hPad
+    
+
+    # Acumuladores netos
+    Fx = 0.0; Fy = 0.0; Fz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    
+    s = zp
+    δ = s + d/2 -a
+
+    # --- Repulsión pad (esfera–plano) ---
+    if δ > 0.0
+        Fh = -Ebp * sqrt(d * δ^3) / (eta * (l + d)) # negativo: hacia -z
+        # Fuerza en el polo: (0,0,Fh)
+        Fx += 0.0; Fy += 0.0; Fz +=  Fh
+        # Par respecto al CM: r × F
+        rx = xp - x; ry = yp - y; rz = zp - z
+        τx += ry*Fh - rz*0.0
+        τy += rz*0.0 - rx*Fh
+        τz += rx*0.0 - ry*0.0
+    end
+
+  
+
+    # --- Proyección correcta del par a (θ, φ) ---
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    # sθ = u × du/dθ
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    # sφ = u × du/dφ
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    scale = 12.0 / ((l + d)^2)
+    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fx, Fy, Fz, Wθ, Wφ
+end
+
+
+
+
+
+
+function apply_pad_contact_along_rod(
+    # estado bacteria
+    x, y, z, d, l, theta, phi,
+    # parámetros físicos
+    eta, Ebp,
+    # pad
+    HPad, simBox, NMedium,
+    # paso sobre el rod
+    Δs::Float64 = 1.0; F_pad = nothing
+)
+    
+    if F_pad === nothing
+        F_pad = zeros(size(HPad))
+    end
+    # orientación del rod (tu convención)
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    # grid spacing
+    hx = (simBox[1,2] - simBox[1,1]) / NMedium[1]
+    hy = (simBox[2,2] - simBox[2,1]) / NMedium[2]
+
+    Δs_eff = min(Δs, 0.5*min(hx, hy))  # para no saltar celdas
+
+
+    # Acumuladores totales bacteria
+    Fx_tot = 0.0; Fy_tot = 0.0; Fz_tot = 0.0
+    Wθ_tot = 0.0; Wφ_tot = 0.0
+
+    # recorrer s en [-l/2, l/2]
+    K = max(2, ceil(Int, l / Δs_eff))  # aseguras al menos 2
+    for s in LinRange(-l/2, l/2, K)
+
+        # punto en el rod
+        xp = x + s*ux
+        yp = y + s*uy
+        zp = z + s*uz
+
+        # celda del pad
+        idx = Int(floor(Int, xp/(simBox[1,2]-simBox[1,1])*NMedium[1]) + NMedium[1]/2)
+        if mod(xp, (simBox[1,2]-simBox[1,1])/NMedium[1])>0
+            idx += 1
+        end
+        idy = Int(floor(Int, yp/(simBox[2,2]-simBox[2,1])*NMedium[2])+ NMedium[2]/2)
+        if mod(yp, (simBox[2,2]-simBox[2,1])/NMedium[2])>0
+            idy += 1
+        end
+        
+
+        # h local del pad (tu altura / “a” local)
+        hPad = HPad[idx, idy, 1]
+
+        # fuerza en ese punto (tu función)
+        Fx, Fy, Fz, Wθ, Wφ = padRepulsion_rods_point_3d(
+            x, y, z,  # CM bacteria
+            xp, yp, zp,  # punto sobre el rod
+            d, l, theta, phi,
+            eta, Ebp, hPad
+        )
+
+        # acumula bacteria
+        Fx_tot += Fx; Fy_tot += Fy; Fz_tot += Fz
+        Wθ_tot += Wθ; Wφ_tot += Wφ
+        F_pad[idx, idy, 1] += -Fz*eta*(l+d)
+
+    end
+
+    return Fx_tot, Fy_tot, Fz_tot, Wθ_tot, Wφ_tot, F_pad
+end
+
+
+
 
 function padRepulsion_rods3d(
     x,y,z,d,l,theta,phi,
