@@ -394,6 +394,90 @@ function attractiveForces_rods_yukawa3d(
 end
 
 
+function attractiveForces_rodspoles_yukawa3d(
+    x,y,z,d,l,theta,phi,                  # rod i
+    x2,y2,z2,d2,l2,theta2,phi2,           # rod j
+    eta, eps, gamma; rcut_factor=5.0, hmin_factor=1e-3
+)
+    # Fuerza y par (sobre i por j)
+    Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
+    τx = 0.0; τy = 0.0; τz = 0.0
+
+    # Polos de cada rod (centros de las tapas hemisféricas)
+    (x1i,y1i,z1i), (x2i,y2i,z2i) = rod_poles3d_ordered(x,  y,  z,  l,  theta,  phi)
+
+    
+    # Parámetros geométricos
+    σ    = 0.5*(d + d2)
+    rcut = rcut_factor * σ
+
+    # 2×2 combinaciones de polos (i ← j)
+    for (xpi, ypi, zpi) in ((x1i,y1i,z1i), (x2i,y2i,z2i))
+        # brazo del par (desde CM_i al polo_i)
+        rix = xpi - x;  riy = ypi - y;  riz = zpi - z
+
+        # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
+        xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
+            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+                                        x2, y2, z2, l2, theta2, phi2)
+
+        # 2) Vector y distancia j->i
+        dx = xiAux - xjAux
+        dy = yiAux - yjAux
+        dz = ziAux - zjAux
+        rij = sqrt(dx*dx + dy*dy + dz*dz)
+
+        h = rij - σ
+
+        if rij <= rcut && h>0
+            # Yukawa atractivo desplazado por σ:
+            # u(r) = -eps * exp(-gamma*(r-σ)) / r
+            # F = -du/dr * n̂ ⇒ magnitud (negativa: hacia el otro polo)
+            Fmag = - eps * exp(-gamma*h) * (gamma*rij + 1.0) / (rij^2)
+
+            # Reescalado consistente
+            Fmag /= (eta * (l + d))
+
+            inv_r = 1.0/rij
+            nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
+
+            Fx_p = Fmag * nijx
+            Fy_p = Fmag * nijy
+            Fz_p = Fmag * nijz
+
+            Fijx += Fx_p;  Fijy += Fy_p;  Fijz += Fz_p
+
+            # Par en el CM de i: τ = r_i × F_p
+            τx += riy*Fz_p - riz*Fy_p
+            τy += riz*Fx_p - rix*Fz_p
+            τz += rix*Fy_p - riy*Fx_p
+        end
+      
+    end
+
+    # Proyección a (θ, φ)
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+    sθx = uy*duθ[3] - uz*duθ[2]
+    sθy = uz*duθ[1] - ux*duθ[3]
+    sθz = ux*duθ[2] - uy*duθ[1]
+
+    sφx = uy*duφ[3] - uz*duφ[2]
+    sφy = uz*duφ[1] - ux*duφ[3]
+    sφz = ux*duφ[2] - uy*duφ[1]
+
+    scale = 12.0 / ((l + d)^2)
+    Wijtheta = scale * (τx*sθx + τy*sθy + τz*sθz)
+    Wijphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+    return Fijx, Fijy, Fijz, Wijtheta, Wijphi
+end
+
 # --- Atracción bacteria–sustrato (Yukawa) para un rod en 3D ---
 #   U_cs(h) = eps_cs * exp(gamma*(h - h0)) / (h - h0)
 #   Fz = -dU/dh  (dirección -z; aquí el signo sale de la derivada)
