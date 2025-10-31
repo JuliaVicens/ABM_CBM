@@ -393,6 +393,7 @@ function attractiveForces_rods_yukawa3d(
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
 end
 
+
 function alignmentTorque_rods3d(
     x,y,z,d,l,theta,phi,
     x2,y2,z2,d2,l2,theta2,phi2,
@@ -513,8 +514,9 @@ function repulsiveForces_rods3dline_asym(
     # Movilidad anisótropa (como en tu versión actual)
     mu_par  = 1.0 / eta           # μ∥
     mu_perp = 1.0 / (eta * A)     # μ⊥
+    delta_s = l / (K - 1)        # separación entre puntos muestreados
 
-      for s in LinRange(-l/2, l/2, K)
+    for s in LinRange(-l/2, l/2, K)
         # Punto sobre el eje del rod i
         xpi = x + s*ux
         ypi = y + s*uy
@@ -537,7 +539,7 @@ function repulsiveForces_rods3dline_asym(
             nijz = dz / rij
 
             # Fuerza cruda de contacto (SIN /eta)
-            Fraw_mag = E * sqrt(d2 * hAux^3) / (l + d)
+            Fraw_mag = delta_s*E * sqrt(d2 * hAux^3) / (l + d)
             Fx_raw = Fraw_mag * nijx
             Fy_raw = Fraw_mag * nijy
             Fz_raw = Fraw_mag * nijz
@@ -580,6 +582,167 @@ function repulsiveForces_rods3dline_asym(
 
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
 end
+
+# Perfil de radio con suavizado C¹ en las puntas
+# s ∈ [-L/2, L/2], a = radio del cuerpo, a_end = radio en la punta, l_tip = longitud de la zona de punta
+# p = exponente de suavizado (p=4 o 6 suele ir muy bien)
+@inline function radius_profile_C1(s, L, a, a_end, l_tip, p=1)
+    sabs = abs(s)
+    s0   = L/2 - l_tip
+    if sabs <= s0
+        return a
+    else
+        # t en [0,1] a lo largo de la punta
+        t = (sabs - s0) / l_tip
+        # Suavizado polinómico C¹: valor y derivada nulas en el empalme
+        # r = a_end + (a - a_end)*(1 - t^p)
+        return a_end + (a - a_end) * (1.0 - t^p)
+    end
+end
+
+
+function repulsiveForces_rods3dline_asym_cutC1(
+    x,y,z,d,l,theta,phi,                     # rod i (centro, diámetro, largo, orientación)
+    x2,y2,z2,d2,l2,theta2,phi2,              # rod j
+    eta, Eeff, A, K;                         # Eeff = E* (módulo efectivo de Hertz)
+    a_end_ratio = 0.8,                       # r_tip = a_end_ratio * a
+    l_tip  = 0.2,                      # l_tip = l_tip_frac * L
+    p_smooth    = 3                          # exponente de suavizado (C¹)
+)
+
+    # Acumuladores de fuerza y par (sobre i por j)
+    Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
+    τx_sum = 0.0; τy_sum = 0.0; τz_sum = 0.0
+
+    # Dirección del rod i (φ = elevación)
+    ux =  cos(theta)*cos(phi)
+    uy =  sin(theta)*cos(phi)
+    uz =  sin(phi)
+
+    # Dirección del rod j
+    ux2 =  cos(theta2)*cos(phi2)
+    uy2 =  sin(theta2)*cos(phi2)
+    uz2 =  sin(phi2)
+
+    # Derivadas para proyección (asumiendo tu convención)
+    duθx, duθy, duθz = du_dtheta(theta, phi)
+    duφx, duφy, duφz = du_dphi(theta,  phi)
+
+    # sθ = u × du/dθ ; sφ = u × du/dφ
+    sθx = uy*duθz - uz*duθy
+    sθy = uz*duθx - ux*duθz
+    sθz = ux*duθy - uy*duθx
+
+    sφx = uy*duφz - uz*duφy
+    sφy = uz*duφx - ux*duφz
+    sφz = ux*duφy - uy*duφx
+
+    # Movilidad anisótropa (como en tu versión actual)
+    mu_par  = 1.0 / eta           # μ∥
+    mu_perp = 1.0 / (eta * A)     # μ⊥
+    delta_s = l / (K - 1)         # separación entre puntos muestreados
+
+    # Radios base
+    a_i  = 0.5*d
+    a_j  = 0.5*d2
+    
+    a_end_i = a_end_ratio * a_i
+    a_end_j = a_end_ratio * a_j
+
+    for s in LinRange(-l/2, l/2, K)
+        # Punto sobre el eje del rod i
+        xpi = x + s*ux
+        ypi = y + s*uy
+        zpi = z + s*uz
+
+        # Punto más cercano sobre el rod j (como hacías con los polos)
+        xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
+            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+                                         x2,  y2,  z2,  l2, theta2, phi2)
+
+        # Vector j->i y distancia
+        dx = xiAux - xjAux
+        dy = yiAux - yjAux
+        dz = ziAux - zjAux
+        rij = sqrt(dx*dx + dy*dy + dz*dz)
+
+        # --- NUEVO: radios locales con suavizado C¹ ---
+        # r_i en s (ya lo tenemos)
+        r_i = radius_profile_C1(s, l, a_i, a_end_i, l_tip, p_smooth)
+
+        # Necesitamos s_j (parámetro axial del punto de j)
+        # Proyección del vector desde el centro de j hasta (xjAux,yjAux,zjAux) sobre el eje u2
+        sx = xjAux - x2; sy = yjAux - y2; sz = zjAux - z2
+        s_j = sx*ux2 + sy*uy2 + sz*uz2
+        # Clampear a [-l2/2, l2/2] por robustez numérica
+        if s_j >  l2/2; s_j =  l2/2; elseif s_j < -l2/2; s_j = -l2/2; end
+
+        r_j = radius_profile_C1(s_j, l2, a_j, a_end_j, l_tip, p_smooth)
+
+        # --- solapamiento local (Hertz) ---
+        # contacto si rij < r_i + r_j
+        if rij > 0.0
+            hAux = (r_i + r_j) - rij
+            if hAux > 0.0
+                nijx = dx / rij
+                nijy = dy / rij
+                nijz = dz / rij
+
+                # Curvatura efectiva local (esfera-esfera con radios locales)
+                # Robusto y estándar para ABM con cápsulas:
+                Rstar = (r_i * r_j) / (r_i + r_j)
+
+                # Hertz local: F = (4/3) Eeff sqrt(R*) delta^(3/2)
+                # factor delta_s para integrar a lo largo del eje de i (como haces tú)
+                # Fuerza cruda de contacto (SIN /eta)
+
+               
+                F_mag = delta_s * Eeff * sqrt(Rstar) * (hAux^(1.5))
+
+                # Fuerza normal
+                Fx_raw = F_mag * nijx
+                Fy_raw = F_mag * nijy
+                Fz_raw = F_mag * nijz
+
+                # TRASLACIÓN: movilidad anisótropa (tu estilo actual)
+                u_dot_Fraw = ux*Fx_raw + uy*Fy_raw + uz*Fz_raw
+                Fasx = mu_perp*Fx_raw + (mu_par - mu_perp)*u_dot_Fraw*ux
+                Fasy = mu_perp*Fy_raw + (mu_par - mu_perp)*u_dot_Fraw*uy
+                Fasz = mu_perp*Fz_raw + (mu_par - mu_perp)*u_dot_Fraw*uz
+
+                Fijx += Fasx
+                Fijy += Fasy
+                Fijz += Fasz
+
+                # ROTACIÓN: usa la fuerza isotrópica para el brazo
+                Fx_iso = Fx_raw; Fy_iso = Fy_raw; Fz_iso = Fz_raw
+
+                # Brazo desde CM_i al punto de aplicación (xpi,ypi,zpi)
+                rix = xpi - x
+                riy = ypi - y
+                riz = zpi - z
+
+
+                τx = riy*Fz_iso - riz*Fy_iso
+                τy = riz*Fx_iso - rix*Fz_iso
+                τz = rix*Fy_iso - riy*Fx_iso
+
+                τx_sum += τx
+                τy_sum += τy
+                τz_sum += τz
+            end
+        end
+    end
+
+    # Proyección del par total a (θ, φ)
+    # Escala rotacional: tu versión llevaba *mu_perp; la mantenemos
+    scale = 12.0 / ((l + d)^2) * mu_perp
+    Wijtheta = scale * (τx_sum*sθx + τy_sum*sθy + τz_sum*sθz)
+    Wijphi   = scale * (τx_sum*sφx + τy_sum*sφy + τz_sum*sφz)
+
+    return Fijx, Fijy, Fijz, Wijtheta, Wijphi
+end
+
 
 
 function repulsiveForces_rods3d_asym(
@@ -744,75 +907,73 @@ function attractiveForces_rodline_yukawa3d(
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
 end
 
-
-function attractiveForces_rodspoles_yukawa3d(
+function attractiveForces_rodline_spring(
     x,y,z,d,l,theta,phi,                  # rod i
     x2,y2,z2,d2,l2,theta2,phi2,           # rod j
-    eta, eps, gamma; rcut_factor=5.0, hmin_factor=1e-3
+    eta, eps,K; rcut_factor=2
 )
-    # Fuerza y par (sobre i por j)
+    # Acumuladores fuerza/par (sobre i por j)
     Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
     τx = 0.0; τy = 0.0; τz = 0.0
 
-    # Polos de cada rod (centros de las tapas hemisféricas)
-    (x1i,y1i,z1i), (x2i,y2i,z2i) = rod_poles3d_ordered(x,  y,  z,  l,  theta,  phi)
-
-    
-    # Parámetros geométricos
-    σ    = 0.5*(d + d2)
-    rcut = rcut_factor * σ
-
-    # 2×2 combinaciones de polos (i ← j)
-    for (xpi, ypi, zpi) in ((x1i,y1i,z1i), (x2i,y2i,z2i))
-        # brazo del par (desde CM_i al polo_i)
-        rix = xpi - x;  riy = ypi - y;  riz = zpi - z
-
-        # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
-        xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
-                                        x2, y2, z2, l2, theta2, phi2)
-
-        # 2) Vector y distancia j->i
-        dx = xiAux - xjAux
-        dy = yiAux - yjAux
-        dz = ziAux - zjAux
-        rij = sqrt(dx*dx + dy*dy + dz*dz)
-
-        h = rij - σ
-
-        if rij <= rcut && h>0
-            # Yukawa atractivo desplazado por σ:
-            # u(r) = -eps * exp(-gamma*(r-σ)) / r
-            # F = -du/dr * n̂ ⇒ magnitud (negativa: hacia el otro polo)
-            Fmag = - eps * exp(-gamma*h) * (gamma*rij + 1.0) / (rij^2)
-
-            # Reescalado consistente
-            Fmag /= (eta * (l + d))
-
-            inv_r = 1.0/rij
-            nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
-
-            Fx_p = Fmag * nijx
-            Fy_p = Fmag * nijy
-            Fz_p = Fmag * nijz
-
-            Fijx += Fx_p;  Fijy += Fy_p;  Fijz += Fz_p
-
-            # Par en el CM de i: τ = r_i × F_p
-            τx += riy*Fz_p - riz*Fy_p
-            τy += riz*Fx_p - rix*Fz_p
-            τz += rix*Fy_p - riy*Fx_p
-        end
-      
-    end
-
-    # Proyección a (θ, φ)
+    # Dirección del rod i
     ux =  cos(theta)*cos(phi)
     uy =  sin(theta)*cos(phi)
     uz =  sin(phi)
 
-    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
-    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+    # Geometría
+    σ    = 0.5*(d + d2)
+    rcut = rcut_factor * σ
+    delta_s = l / (K - 1)
+    # Muestreo uniforme a lo largo del rod i
+    for s in LinRange(-l/2, l/2, K)
+        # Punto sobre el eje del rod i
+        xpi = x + s*ux
+        ypi = y + s*uy
+        zpi = z + s*uz
+
+        # Punto más cercano sobre el rod j (como hacías con los polos)
+        xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
+            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+                                         x2,  y2,  z2,  l2, theta2, phi2)
+
+        # Vector j->i y distancia
+        dx = xiAux - xjAux
+        dy = yiAux - yjAux
+        dz = ziAux - zjAux
+        rij = sqrt(dx*dx + dy*dy + dz*dz)
+        h = rij - σ
+
+
+        if rij <= rcut && h > 0
+            # Yukawa atractivo desplazado por σ:
+            # u(r) = -eps * exp(-gamma*(r-σ)) / r
+            # F = -du/dr * n̂
+            Fmag = - eps * h
+
+            # Misma normalización que tú
+            Fmag *= delta_s/(eta * (l + d))
+
+            inv_r = 1.0/rij
+            nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
+
+            Fx = Fmag * nijx
+            Fy = Fmag * nijy
+            Fz = Fmag * nijz
+
+            Fijx += Fx;  Fijy += Fy;  Fijz += Fz
+
+           # Par respecto al CM de i
+            rix = xpi - x;  riy = ypi - y;  riz = zpi - z
+            τx += riy*Fz - riz*Fy
+            τy += riz*Fx - rix*Fz
+            τz += rix*Fy - riy*Fx
+        end
+    end
+
+    # Proyección a (θ, φ) (igual que en tu código)
+    duθ = du_dtheta(theta, phi)
+    duφ = du_dphi(theta,  phi)
 
     sθx = uy*duθ[3] - uz*duθ[2]
     sθy = uz*duθ[1] - ux*duθ[3]
@@ -827,6 +988,52 @@ function attractiveForces_rodspoles_yukawa3d(
     Wijphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
 
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
+end
+
+function attractiveForces_rods_yukawa3d(
+    x,y,z,d,l,theta,phi,                  # rod i
+    x2,y2,z2,d2,l2,theta2,phi2,           # rod j
+    eta, eps, gamma; rcut_factor=1.8, hmin_factor=1e-3
+)
+    # Fuerza y par (sobre i por j)
+    Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
+
+    
+    # Parámetros geométricos
+    σ    = 0.5*(d + d2)
+    rcut = rcut_factor * σ
+
+    # 2) Vector y distancia j->i
+    dx = x - x2
+    dy = y - y2
+    dz = z - z2
+    rij = sqrt(dx*dx + dy*dy + dz*dz)
+
+    h = rij - σ
+
+    if rij <= rcut && h>0
+        # Yukawa atractivo desplazado por σ:
+        # u(r) = -eps * exp(-gamma*(r-σ)) / r
+        # F = -du/dr * n̂ ⇒ magnitud (negativa: hacia el otro polo)
+        Fmag = - eps * exp(-gamma*h) * (gamma*rij + 1.0) / (rij^2)
+
+        # Reescalado consistente
+        Fmag /= (eta * (l + d))
+
+        inv_r = 1.0/rij
+        nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
+
+        Fx_p = Fmag * nijx
+        Fy_p = Fmag * nijy
+        Fz_p = Fmag * nijz
+
+        Fijx += Fx_p;  Fijy += Fy_p;  Fijz += Fz_p
+
+
+    end
+      
+
+    return Fijx, Fijy, Fijz, 0, 0
 end
 
 # --- Atracción bacteria–sustrato (Yukawa) para un rod en 3D ---

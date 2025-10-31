@@ -211,7 +211,7 @@ module CBMMetrics
         di = sqrt((x1-pxAux)^2+(y1-pyAux)^2)
         dj = sqrt((x2-pxAux)^2+(y2-pyAux)^2)
         normAux = cos(theta1)*sin(theta2)-sin(theta1)*cos(theta2)
-        if abs(normAux) < 0.000001
+        if abs(normAux) < 10^(⁻15)
             x1Aux,y1Aux= point2line(pxAux,pyAux,x1,y1,theta1)
             x1Aux,y1Aux = pointInsideRod(x1,y1,l1,theta1,x1Aux,y1Aux,separation)
     
