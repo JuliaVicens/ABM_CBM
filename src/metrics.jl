@@ -143,7 +143,7 @@ module CBMMetrics
         cxAux = (x1-x2)
         cyAux = (y1-y2)
         normAux = cos(theta1)*sin(theta2)-sin(theta1)*cos(theta2)
-        if abs(normAux) > 0.0000001
+        if abs(normAux) > 10^(-15)
             scaleAux = (-sin(theta2)*cxAux+cos(theta2)*cyAux)/normAux
             pxIntersect = scaleAux*cos(theta1)+x1
             pyIntersect = scaleAux*sin(theta1)+y1
@@ -183,13 +183,122 @@ module CBMMetrics
     """
     function pointInsideRod(x1,y1,l1,theta1,pxAux,pyAux,separation)
     
-        di = max(sqrt((x1-pxAux)^2+(y1-pyAux)^2),0.00000001)
+        di = max(sqrt((x1-pxAux)^2+(y1-pyAux)^2),10^(-10))
     
         dxi = (pxAux-x1)/di
         dyi = (pyAux-y1)/di
         return separation*min(di,l1/2)*dxi+x1, separation*min(di,l1/2)*dyi+y1
     
     end
+
+    # function pointInsideRod_(x1,y1,l1,theta1,pxAux,pyAux,separation)
+    #     # vector unitario de la barra
+    #     dx = cos(theta1)
+    #     dy = sin(theta1)
+
+    #     # proyección del punto sobre el eje del rod
+    #     s = (pxAux - x1)*dx + (pyAux - y1)*dy  # coordenada sobre el eje
+
+    #     s_clamped = separation * clamp(s, -l1/2, l1/2)
+
+    #     return x1 + s_clamped*dx, y1 + s_clamped*dy
+    # end
+
+
+    """
+    rodIntersection(x1,y1,l1,theta1, x2,y2,l2,theta2; separation=1.0)
+
+    Devuelve los puntos más cercanos entre dos varillas 2D (segmentos) descritas por:
+    - centro (x1,y1), longitud l1, ángulo theta1
+    - centro (x2,y2), longitud l2, ángulo theta2
+
+    Implementa distancia segmento–segmento con proyección y `clamp`, y maneja de forma estable
+    los casos paralelos/colineales (incluido “uno a continuación del otro”).
+    `separation` (0..1) mueve ligeramente los puntos hacia el interior (p.ej., 0.99).
+
+    Retorna: `(x1Aux, y1Aux, x2Aux, y2Aux)`.
+    """
+    function rodIntersection_(x1,y1,l1,theta1, x2,y2,l2,theta2; separation=1.0)
+        # --- ejes unitarios ---
+        n1x, n1y = cos(theta1), sin(theta1)
+        n2x, n2y = cos(theta2), sin(theta2)
+
+        # --- semi-longitudes y centros ---
+        d1 = 0.5*l1
+        d2 = 0.5*l2
+        c1x, c1y = x1, y1
+        c2x, c2y = x2, y2
+
+        # --- utilidades ---
+        dot(a1,a2, b1,b2) = a1*b1 + a2*b2
+        eps = 1e-12
+
+        # r = c1 - c2
+        rx, ry = c1x - c2x, c1y - c2y
+
+        # escalares de la solución en rectas infinitas
+        b   = dot(n1x,n1y, n2x,n2y)     # n1·n2
+        d   = dot(n1x,n1y, rx,ry)       # n1·r
+        e   = dot(n2x,n2y, rx,ry)       # n2·r
+        den = 1.0 - b*b
+
+        ti = 0.0
+        tj = 0.0
+
+        if abs(den) <= eps
+            # ===========================
+            # Caso casi paralelo/colineal
+            # ===========================
+            # desplazamiento a lo largo de n1 desde c1 hasta c2
+            s = (c2x - c1x)*n1x + (c2y - c1y)*n1y
+            same_dir = (b ≥ 0.0)  # n2 ≈ n1 o n2 ≈ -n1
+
+            # hueco entre puntas enfrentadas en el eje
+            gap = if same_dir
+                s - (d1 + d2)     # ambas miran en la misma dirección
+            else
+                s - (d1 - d2)     # orientaciones opuestas
+            end
+
+            if gap > 0
+                # separados: usar puntas enfrentadas
+                ti = +d1
+                tj = same_dir ? -d2 : +d2
+            else
+                # tocando o solapados: elegir punto estable en mitad del solapamiento
+                ti = clamp(s/2, -d1, +d1)
+                tj = same_dir ? (ti - s) : (s - ti)
+                tj = clamp(tj, -d2, +d2)
+            end
+        else
+            # ====================================
+            # Caso general: solución + clamps finos
+            # ====================================
+            # solución en rectas infinitas
+            ti = ( b*e - d)/den
+            tj = ( e - b*d)/den
+
+            # clamp iterativo consistente
+            ti = clamp(ti, -d1, d1)
+            tj = e + b*ti
+            tj = clamp(tj, -d2, d2)
+
+            ti = -d + b*tj
+            ti = clamp(ti, -d1, d1)
+
+            tj = e + b*ti
+            tj = clamp(tj, -d2, d2)
+        end
+
+        # --- puntos sobre cada segmento (con separation) ---
+        x1Aux = c1x + (separation*ti)*n1x
+        y1Aux = c1y + (separation*ti)*n1y
+        x2Aux = c2x + (separation*tj)*n2x
+        y2Aux = c2y + (separation*tj)*n2y
+
+        return x1Aux, y1Aux, x2Aux, y2Aux
+    end
+
 
     """
         function rodIntersection(x1,y1,l1,theta1,x2,y2,l2,theta2;separation=0.99)
@@ -199,7 +308,7 @@ module CBMMetrics
     
     Returns the coordinates of the closest spheres (x1Aux,y1Aux), (x2Aux,y2Aux).
     """
-    function rodIntersection(x1,y1,l1,theta1,x2,y2,l2,theta2;separation=0.99)
+    function rodIntersection(x1,y1,l1,theta1,x2,y2,l2,theta2;separation=1)
             
         #Compute distance between centers of mass
         x1Aux = x1; x2Aux = x2; y1Aux = y1; y2Aux = y2; #Declare them in the global scope
@@ -211,7 +320,7 @@ module CBMMetrics
         di = sqrt((x1-pxAux)^2+(y1-pyAux)^2)
         dj = sqrt((x2-pxAux)^2+(y2-pyAux)^2)
         normAux = cos(theta1)*sin(theta2)-sin(theta1)*cos(theta2)
-        if abs(normAux) < 10^(⁻15)
+        if abs(normAux) < 10^(-15)
             x1Aux,y1Aux= point2line(pxAux,pyAux,x1,y1,theta1)
             x1Aux,y1Aux = pointInsideRod(x1,y1,l1,theta1,x1Aux,y1Aux,separation)
     
@@ -245,7 +354,6 @@ module CBMMetrics
         return x1Aux,y1Aux,x2Aux,y2Aux
     end
     
-
 
 
     # ===== utilidades comunes (simples) =====

@@ -124,6 +124,15 @@ function repulsiveForces_rods(
         Fijx = FnAux * nijx
         Fijy = FnAux * nijy
         Wij = ((xiAux-x)*Fijy - (yiAux-y)*Fijx) * 12. / ((l + d)^2)
+
+    # elseif (sqrt((xiAux+l*cos(theta)-(xjAux+l2*cos(theta2)))^2 +(yiAux+l*sin(theta)-(yjAux+l2*sin(theta2)))^2))< (d+d2)/2.
+    #     println("Error in distance calculation between rods")
+    # elseif (sqrt((xiAux-l*cos(theta)-(xjAux-l2*cos(theta2)))^2 +(yiAux-l*sin(theta)-(yjAux-l2*sin(theta2)))^2))< (d+d2)/2.
+    #     println("Error in distance calculation between rods")
+    # elseif (sqrt((xiAux-l*cos(theta)-(xjAux+l2*cos(theta2)))^2 +(yiAux-l*sin(theta)-(yjAux+l2*sin(theta2)))^2))< (d+d2)/2.
+    #     println("Error in distance calculation between rods")
+    # elseif (sqrt((xiAux+l*cos(theta)-(xjAux-l2*cos(theta2)))^2 +(yiAux+l*sin(theta)-(yjAux-l2*sin(theta2)))^2))< (d+d2)/2.
+    #     println("Error in distance calculation between rods")
       
     end
 
@@ -131,6 +140,115 @@ function repulsiveForces_rods(
 
 end
 
+
+function repulsiveForces_rods_(
+    x,y,d,l,theta,
+    x2,y2,d2,l2,theta2,eta, E)
+
+    Fijx = 0.0
+    Fijy = 0.0
+    Wij  = 0.0
+
+    # --- helpers y pre-cálculos ---
+ 
+    Rsum = (d + d2)/2.0
+
+    # medias longitudes (las puntas reales están a ± l/2)
+    hx  = (l/2.0)*cos(theta)
+    hy  = (l/2.0)*sin(theta)
+    hx2 = (l2/2.0)*cos(theta2)
+    hy2 = (l2/2.0)*sin(theta2)
+
+    # puntas de cada rod
+    # rod 1
+    x_plus  = x + hx;  y_plus  = y + hy
+    x_minus = x - hx;  y_minus = y - hy
+    # rod 2
+    x2_plus  = x2 + hx2;  y2_plus  = y2 + hy2
+    x2_minus = x2 - hx2;  y2_minus = y2 - hy2
+
+
+
+    # =========================================
+    # 1) Caso general: puntos "virtuales" vía rodIntersection
+    # =========================================
+    xiAux, yiAux, xjAux, yjAux = CBMMetrics.rodIntersection_(x,y,l,theta, x2,y2,l2,theta2)
+
+    rij = sqrt((xiAux - xjAux)^2 + (yiAux - yjAux)^2)
+    if rij > 0.0 && rij < Rsum
+        hAux = Rsum - rij
+        nijx = (xiAux - xjAux)/rij
+        nijy = (yiAux - yjAux)/rij
+
+        FnAux = E * sqrt(d * hAux^3) / (eta*(l+d))
+        Fijx  = FnAux * nijx
+        Fijy  = FnAux * nijy
+        Wij   = ((xiAux - x)*Fijy - (yiAux - y)*Fijx) * 12.0 / (l^2)
+
+    # =========================================
+    # 2) Puntas: + con + (punta delantera de ambos)
+    # =========================================
+    elseif sqrt((x_plus - x2_plus)^2 + (y_plus - y2_plus)^2) < Rsum
+        xiAux, yiAux = x_plus,  y_plus
+        xjAux, yjAux = x2_plus, y2_plus
+        rij = sqrt((xiAux - xjAux)^2 + (yiAux - yjAux)^2)
+        hAux = Rsum - rij
+        nijx = (xiAux - xjAux)/rij
+        nijy = (yiAux - yjAux)/rij
+
+        FnAux = E * sqrt(d * hAux^3) / (eta*(l+d))
+        Fijx  = FnAux * nijx
+        Fijy  = FnAux * nijy
+        Wij   = ((xiAux - x)*Fijy - (yiAux - y)*Fijx) * 12.0 / (l^2)
+    # =========================================
+    # 3) Puntas: - con - (colas de ambos)
+    # =========================================
+    elseif sqrt((x_minus - x2_minus)^2 + (y_minus - y2_minus)^2) < Rsum
+        xiAux, yiAux = x_minus,  y_minus
+        xjAux, yjAux = x2_minus, y2_minus
+        rij = sqrt((xiAux - xjAux)^2 + (yiAux - yjAux)^2)
+        hAux = Rsum - rij
+        nijx = (xiAux - xjAux)/rij
+        nijy = (yiAux - yjAux)/rij
+
+        FnAux = E * sqrt(d * hAux^3) / (eta*(l+d))
+        Fijx  = FnAux * nijx
+        Fijy  = FnAux * nijy
+        Wij   = ((xiAux - x)*Fijy - (yiAux - y)*Fijx) * 12.0 / (l^2)
+    # =========================================
+    # 4) Puntas cruzadas: - de 1 con + de 2
+    # =========================================
+    elseif sqrt((x_minus - x2_plus)^2 + (y_minus - y2_plus)^2) < Rsum
+        xiAux, yiAux = x_minus,  y_minus
+        xjAux, yjAux = x2_plus,  y2_plus
+        rij = sqrt((xiAux - xjAux)^2 + (yiAux - yjAux)^2)
+        hAux = Rsum - rij
+        nijx = (xiAux - xjAux)/rij
+        nijy = (yiAux - yjAux)/rij
+
+        FnAux = E * sqrt(d * hAux^3) / (eta*(l+d))
+        Fijx  = FnAux * nijx
+        Fijy  = FnAux * nijy
+        Wij   = ((xiAux - x)*Fijy - (yiAux - y)*Fijx) * 12.0 / (l^2)
+    # =========================================
+    # 5) Puntas cruzadas: + de 1 con - de 2
+    # =========================================
+    elseif sqrt((x_plus - x2_minus)^2 + (y_plus - y2_minus)^2) < Rsum
+        xiAux, yiAux = x_plus,   y_plus
+        xjAux, yjAux = x2_minus, y2_minus
+        rij = sqrt((xiAux - xjAux)^2 + (yiAux - yjAux)^2)
+        hAux = Rsum - rij
+        nijx = (xiAux - xjAux)/rij
+        nijy = (yiAux - yjAux)/rij
+
+        FnAux = E * sqrt(d * hAux^3) / (eta*(l+d))
+        Fijx  = FnAux * nijx
+        Fijy  = FnAux * nijy
+        Wij   = ((xiAux - x)*Fijy - (yiAux - y)*Fijx) * 12.0 / (l^2)
+    end
+
+    return Fijx, Fijy, Wij
+end
 
 
 function repulsiveForces_rods3d(
