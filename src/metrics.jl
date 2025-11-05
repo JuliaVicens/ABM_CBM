@@ -354,6 +354,104 @@ module CBMMetrics
         return x1Aux,y1Aux,x2Aux,y2Aux
     end
     
+    """
+    rodIntersection(x1,y1,z1, l1,theta1,phi1,
+                    x2,y2,z2, l2,theta2,phi2; separation=1.0)
+
+    Devuelve los puntos más cercanos entre dos varillas 3D (segmentos) descritas por:
+    - centro (x1,y1,z1), longitud l1, dirección por ángulos (theta1=azimut, phi1=elevación)
+    - centro (x2,y2,z2), longitud l2, dirección por ángulos (theta2=azimut, phi2=elevación)
+
+    Implementa distancia segmento–segmento con proyección y `clamp`, y maneja de forma
+    estable los casos paralelos/colineales. `separation` (0..1) mueve los puntos hacia
+    el interior (p.ej., 0.99).
+
+    Retorna: (x1Aux, y1Aux, z1Aux, x2Aux, y2Aux, z2Aux).
+    """
+    function rodIntersection3d_(x1,y1,z1, l1,theta1,phi1,
+                            x2,y2,z2, l2,theta2,phi2; separation=1.0)
+
+        # --- utilidades vectoriales ---
+        dot3(ax,ay,az, bx,by,bz) = ax*bx + ay*by + az*bz
+        clampv(t, a, b) = t < a ? a : (t > b ? b : t)
+        eps = 1e-12
+
+        # --- dirección unitaria a partir de (θ=azimut, φ=elevación) ---
+        # φ = 0 en el plano XY; φ>0 hacia +Z
+        n1x = cos(theta1)*cos(phi1); n1y = sin(theta1)*cos(phi1); n1z = sin(phi1)
+        n2x = cos(theta2)*cos(phi2); n2y = sin(theta2)*cos(phi2); n2z = sin(phi2)
+
+        # --- semi-longitudes y centros ---
+        d1 = 0.5*l1
+        d2 = 0.5*l2
+        c1x, c1y, c1z = x1, y1, z1
+        c2x, c2y, c2z = x2, y2, z2
+
+        # r = c1 - c2
+        rx, ry, rz = c1x - c2x, c1y - c2y, c1z - c2z
+
+        # escalares para la solución en rectas infinitas
+        b   = dot3(n1x,n1y,n1z, n2x,n2y,n2z)   # n1·n2
+        d   = dot3(n1x,n1y,n1z, rx,ry,rz)      # n1·r
+        e   = dot3(n2x,n2y,n2z, rx,ry,rz)      # n2·r
+        den = 1.0 - b*b
+
+        ti = 0.0  # parámetro sobre la varilla 1 (en [-d1, d1])
+        tj = 0.0  # parámetro sobre la varilla 2 (en [-d2, d2])
+
+        if abs(den) <= eps
+            # ===========================
+            # Caso casi paralelo/colineal
+            # ===========================
+            # proyección axial c2 sobre eje de la 1ª
+            s = dot3(c2x - c1x, c2y - c1y, c2z - c1z, n1x,n1y,n1z)
+            same_dir = (b ≥ 0.0)
+
+            # hueco axial entre puntas enfrentadas (positivo = separados)
+            gap = same_dir ? (s - (d1 + d2)) : (s - (d1 - d2))
+
+            if gap > 0
+                # separados: puntas enfrentadas
+                ti = +d1
+                tj = same_dir ? -d2 : +d2
+            else
+                # tocando/solapados: punto estable en mitad del solapamiento
+                ti = clampv(s/2, -d1, +d1)
+                tj = same_dir ? (ti - s) : (s - ti)
+                tj = clampv(tj, -d2, +d2)
+            end
+        else
+            # ====================================
+            # Caso general: solución + clamps finos
+            # ====================================
+            # solución en rectas infinitas
+            ti = ( b*e - d)/den
+            tj = ( e - b*d)/den
+
+            # clamp iterativo consistente
+            ti = clampv(ti, -d1, d1)
+            tj = e + b*ti
+            tj = clampv(tj, -d2, d2)
+
+            ti = -d + b*tj
+            ti = clampv(ti, -d1, d1)
+
+            tj = e + b*ti
+            tj = clampv(tj, -d2, d2)
+        end
+
+        # --- puntos sobre cada segmento (con separation) ---
+        x1Aux = c1x + (separation*ti)*n1x
+        y1Aux = c1y + (separation*ti)*n1y
+        z1Aux = c1z + (separation*ti)*n1z
+
+        x2Aux = c2x + (separation*tj)*n2x
+        y2Aux = c2y + (separation*tj)*n2y
+        z2Aux = c2z + (separation*tj)*n2z
+
+        return x1Aux, y1Aux, z1Aux, x2Aux, y2Aux, z2Aux
+    end
+
 
 
     # ===== utilidades comunes (simples) =====

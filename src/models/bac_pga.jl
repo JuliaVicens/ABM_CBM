@@ -260,7 +260,7 @@ function repulsiveForces_rods3d(
 
     # 1) Puntos de "contacto" (más cercanos) sobre cada segmento
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
+        CBMMetrics.rodIntersection3d_(x, y, z, l, theta, phi,
                           x2, y2, z2, l2, theta2, phi2)
 
     # 2) Distancia y normal j->i
@@ -330,15 +330,15 @@ function repulsiveForces_as_rods(
 
 
     #Function that finds the virtual spheres of contact between both rods
-    xiAux,yiAux,xjAux,yjAux = CBMMetrics.rodIntersection(x,y,l,theta,x2,y2,l2,theta2)
+    xiAux,yiAux,xjAux,yjAux = CBMMetrics.rodIntersection_(x,y,l,theta,x2,y2,l2,theta2)
    
     c=cos(theta)
     s=sin(theta)
     #Compute distance between virtual spheres
     rij = sqrt((xiAux-xjAux)^2 +(yiAux-yjAux)^2)
 
-    mu_par  = 1/(eta*A)   # μ∥
-    mu_perp = A/eta       # μ⊥
+    mu_par  = 1/(eta)   # μ∥
+    mu_perp = 1/(eta*A)       # μ⊥
     
     if rij > 0. && rij < (d+d2)/2. #If it is smaller than a diameter compute forces
         #Compute auxiliar
@@ -353,7 +353,7 @@ function repulsiveForces_as_rods(
         Fijy = FnAux * nijy
         Fasx = (mu_par*c^2 + mu_perp*s^2)*Fijx + (mu_par - mu_perp)*c*s*Fijy
         Fasy = (mu_par - mu_perp)*c*s*Fijx     + (mu_par*s^2 + mu_perp*c^2)*Fijy
-        Wij = ((xiAux-x)*Fijy - (yiAux-y)*Fijx) * 12. / (eta/A*(l + d)^2)
+        Wij = ((xiAux-x)*Fijy - (yiAux-y)*Fijx) * 12.0 *mu_perp / ((l + d)^2)
       
     end
 
@@ -447,7 +447,7 @@ function attractiveForces_rods_yukawa3d(
 
     # 1) Puntos "más cercanos" sobre cada segmento (ajusta el namespace si toca)
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
+        CBMMetrics.rodIntersection3d_(x, y, z, l, theta, phi,
                                      x2, y2, z2, l2, theta2, phi2)
 
     # 2) Vector y distancia j->i
@@ -522,7 +522,7 @@ function alignmentTorque_rods3d(
 
     # puntos más cercanos
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
+        CBMMetrics.rodIntersection3d_(x, y, z, l, theta, phi,
                                      x2, y2, z2, l2, theta2, phi2)
 
     # sanity
@@ -642,7 +642,7 @@ function repulsiveForces_rods3dline_asym(
 
         # Punto más cercano entre (punto i) y (rod j completo)
         xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+            CBMMetrics.rodIntersection3d_(xpi, ypi, zpi, 0.0, theta, phi,
                                          x2,  y2,  z2,  l2, theta2, phi2)
 
         dx = xiAux - xjAux
@@ -775,7 +775,7 @@ function repulsiveForces_rods3dline_asym_cutC1(
 
         # Punto más cercano sobre el rod j (como hacías con los polos)
         xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+            CBMMetrics.rodIntersection3d_(xpi, ypi, zpi, 0.0, theta, phi,
                                          x2,  y2,  z2,  l2, theta2, phi2)
 
         # Vector j->i y distancia
@@ -873,7 +873,7 @@ function repulsiveForces_rods3d_asym(
 
     # Puntos más cercanos
     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-        CBMMetrics.rodIntersection3d(x, y, z, l, theta, phi,
+        CBMMetrics.rodIntersection3d_(x, y, z, l, theta, phi,
                                      x2, y2, z2, l2, theta2, phi2)
 
     dx = xiAux - xjAux
@@ -970,7 +970,7 @@ function attractiveForces_rodline_yukawa3d(
 
         # Punto más cercano sobre el rod j (como hacías con los polos)
         xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+            CBMMetrics.rodIntersection3d_(xpi, ypi, zpi, 0.0, theta, phi,
                                          x2,  y2,  z2,  l2, theta2, phi2)
 
         # Vector j->i y distancia
@@ -1052,7 +1052,7 @@ function attractiveForces_rodline_spring(
 
         # Punto más cercano sobre el rod j (como hacías con los polos)
         xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-            CBMMetrics.rodIntersection3d(xpi, ypi, zpi, 0.0, theta, phi,
+            CBMMetrics.rodIntersection3d_(xpi, ypi, zpi, 0.0, theta, phi,
                                          x2,  y2,  z2,  l2, theta2, phi2)
 
         # Vector j->i y distancia
