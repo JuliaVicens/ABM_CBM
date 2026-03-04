@@ -1108,51 +1108,51 @@ function attractiveForces_rodline_spring(
     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
 end
 
-function attractiveForces_rods_yukawa3d(
-    x,y,z,d,l,theta,phi,                  # rod i
-    x2,y2,z2,d2,l2,theta2,phi2,           # rod j
-    eta, eps, gamma; rcut_factor=1.8, hmin_factor=1e-3
-)
-    # Fuerza y par (sobre i por j)
-    Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
+# function attractiveForces_rods_yukawa3d(
+#     x,y,z,d,l,theta,phi,                  # rod i
+#     x2,y2,z2,d2,l2,theta2,phi2,           # rod j
+#     eta, eps, gamma; rcut_factor=1.8, hmin_factor=1e-3
+# )
+#     # Fuerza y par (sobre i por j)
+#     Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
 
     
-    # Parámetros geométricos
-    σ    = 0.5*(d + d2)
-    rcut = rcut_factor * σ
+#     # Parámetros geométricos
+#     σ    = 0.5*(d + d2)
+#     rcut = rcut_factor * σ
 
-    # 2) Vector y distancia j->i
-    dx = x - x2
-    dy = y - y2
-    dz = z - z2
-    rij = sqrt(dx*dx + dy*dy + dz*dz)
+#     # 2) Vector y distancia j->i
+#     dx = x - x2
+#     dy = y - y2
+#     dz = z - z2
+#     rij = sqrt(dx*dx + dy*dy + dz*dz)
 
-    h = rij - σ
+#     h = rij - σ
 
-    if rij <= rcut && h>0
-        # Yukawa atractivo desplazado por σ:
-        # u(r) = -eps * exp(-gamma*(r-σ)) / r
-        # F = -du/dr * n̂ ⇒ magnitud (negativa: hacia el otro polo)
-        Fmag = - eps * exp(-gamma*h) * (gamma*rij + 1.0) / (rij^2)
+#     if rij <= rcut && h>0
+#         # Yukawa atractivo desplazado por σ:
+#         # u(r) = -eps * exp(-gamma*(r-σ)) / r
+#         # F = -du/dr * n̂ ⇒ magnitud (negativa: hacia el otro polo)
+#         Fmag = - eps * exp(-gamma*h) * (gamma*rij + 1.0) / (rij^2)
 
-        # Reescalado consistente
-        Fmag /= (eta * (l + d))
+#         # Reescalado consistente
+#         Fmag /= (eta * (l + d))
 
-        inv_r = 1.0/rij
-        nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
+#         inv_r = 1.0/rij
+#         nijx = dx*inv_r;  nijy = dy*inv_r;  nijz = dz*inv_r
 
-        Fx_p = Fmag * nijx
-        Fy_p = Fmag * nijy
-        Fz_p = Fmag * nijz
+#         Fx_p = Fmag * nijx
+#         Fy_p = Fmag * nijy
+#         Fz_p = Fmag * nijz
 
-        Fijx += Fx_p;  Fijy += Fy_p;  Fijz += Fz_p
+#         Fijx += Fx_p;  Fijy += Fy_p;  Fijz += Fz_p
 
 
-    end
+#     end
       
 
-    return Fijx, Fijy, Fijz, 0, 0
-end
+#     return Fijx, Fijy, Fijz, 0, 0
+# end
 
 # --- Atracción bacteria–sustrato (Yukawa) para un rod en 3D ---
 #   U_cs(h) = eps_cs * exp(gamma*(h - h0)) / (h - h0)
