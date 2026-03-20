@@ -17,3 +17,4 @@ test/testfiles/*
 *.png
 *.svg
 *.toml
+ch_gpu_env/*
