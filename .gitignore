@@ -18,3 +18,4 @@ test/testfiles/*
 *.svg
 *.toml
 ch_gpu_env/*
+*.eps

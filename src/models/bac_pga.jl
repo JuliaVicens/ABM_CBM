@@ -236,6 +236,7 @@ function repulsiveForces_rods3d_asym(
     return vix, viy, viz, ωtheta, ωphi
 end
 
+
 function substrateAttraction_rods_yukawa3d(
     x, y, z, d, l, theta, phi,
     eta, eps_cs, gamma, A;
