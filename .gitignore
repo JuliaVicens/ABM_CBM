@@ -19,3 +19,6 @@ test/testfiles/*
 *.toml
 ch_gpu_env/*
 *.eps
+
+Manifest.toml
+Project.toml
