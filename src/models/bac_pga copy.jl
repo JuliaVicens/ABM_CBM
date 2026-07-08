@@ -1165,72 +1165,140 @@ end
 #   h0       : posición efectiva del "sustrato" en la métrica de h (paper)
 #   rcut_h   : (opcional) corte de alcance en h para eficiencia
 #
+# function substrateAttraction_rods_yukawa3d(
+#     x,y,z,d,l,theta,phi,
+#     eta, eps_cs, gamma; rcut_h = 5.0
+# )
+#     a = 0 # plano en z=0
+#     (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
+
+#     # Acumuladores
+#     Fx = 0.0; Fy = 0.0; Fz = 0.0
+#     τx = 0.0; τy = 0.0; τz = 0.0
+
+#     # Recorremos polos (aproximación por extremos del esferocilindro)
+#     for pole in 1:2
+#         xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
+
+#         # gap h = distancia "libre" polo–plano menos el radio a
+#         #   s = zp  (altura del polo)
+#         #   h = s - a
+#         s  = zp
+#         h  = s - a + d/2
+
+#         # Solo aporta si está por encima del plano efectivo (h > h0)
+#         # y dentro de un corte razonable
+#         if h > 0
+#             Δh = h 
+#             if Δh < rcut_h
+#                 # f(h) = exp(gamma*(h-h0)) / (h-h0)
+#                 # dU/dh = eps_cs * f * (gamma - 1/(h-h0))
+#                 # F = -dU/dh  (hacia -z si dU/dh > 0)
+#                 f     = exp(-gamma * Δh) / (Δh)
+#                 dUdh  = eps_cs * f * (-gamma - 1.0/Δh)
+#                 Fmag  = - dUdh / (eta * (l + d))   # reescalado consistente
+
+#                 # Fuerza solo en z (hacia el sustrato si Fmag < 0)
+#                 Fx_p, Fy_p, Fz_p = 0.0, 0.0, Fmag
+#                 Fx += Fx_p; Fy += Fy_p; Fz += Fz_p
+
+#                 # Par respecto al CM: r × F
+#                 rx = xp - x; ry = yp - y; rz = zp - z
+#                 τx += ry*Fz_p - rz*Fy_p
+#                 τy += rz*Fx_p - rx*Fz_p
+#                 τz += rx*Fy_p - ry*Fx_p
+#             end
+#         end
+#     end
+
+#     # --- Proyección del par a (θ, φ) ---
+#     ux =  cos(theta)*cos(phi)
+#     uy =  sin(theta)*cos(phi)
+#     uz =  sin(phi)
+
+#     duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
+#     duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+
+#     # sθ = u × du/dθ
+#     sθx = uy*duθ[3] - uz*duθ[2]
+#     sθy = uz*duθ[1] - ux*duθ[3]
+#     sθz = ux*duθ[2] - uy*duθ[1]
+
+#     # sφ = u × du/dφ
+#     sφx = uy*duφ[3] - uz*duφ[2]
+#     sφy = uz*duφ[1] - ux*duφ[3]
+#     sφz = ux*duφ[2] - uy*duφ[1]
+
+#     # Mismo factor de escala que usas en el resto del código
+#     scale = 12.0 / ((l + d)^2)
+#     Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
+#     Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+
+#     return Fx, Fy, Fz, Wθ, Wφ
+# end
+
 function substrateAttraction_rods_yukawa3d(
     x,y,z,d,l,theta,phi,
     eta, eps_cs, gamma; rcut_h = 5.0
 )
-    a = 0 # plano en z=0
+    a = 0.0  # plano en z = 0
     (x1,y1,z1), (x2,y2,z2) = rod_poles3d_ordered(x,y,z,l,theta,phi)
 
-    # Acumuladores
     Fx = 0.0; Fy = 0.0; Fz = 0.0
     τx = 0.0; τy = 0.0; τz = 0.0
 
-    # Recorremos polos (aproximación por extremos del esferocilindro)
     for pole in 1:2
         xp, yp, zp = pole == 1 ? (x1,y1,z1) : (x2,y2,z2)
 
-        # gap h = distancia "libre" polo–plano menos el radio a
-        #   s = zp  (altura del polo)
-        #   h = s - a
-        s  = zp
-        h  = s - a + d/2
+        # Gap libre esfera-plano
+        h = zp - a - d/2
 
-        # Solo aporta si está por encima del plano efectivo (h > h0)
-        # y dentro de un corte razonable
-        if h > 0
-            Δh = h 
-            if Δh < rcut_h
-                # f(h) = exp(gamma*(h-h0)) / (h-h0)
-                # dU/dh = eps_cs * f * (gamma - 1/(h-h0))
-                # F = -dU/dh  (hacia -z si dU/dh > 0)
-                f     = exp(gamma * Δh) / (Δh)
-                dUdh  = eps_cs * f * (gamma - 1.0/Δh)
-                Fmag  = - dUdh / (eta * (l + d))   # reescalado consistente
+        if 0.0 < h < rcut_h
+            # Potencial atractivo:
+            # U(h) = -eps_cs * exp(-gamma*h) / h
+            #
+            # dU/dh = eps_cs * exp(-gamma*h) * (gamma/h + 1/h^2)
+            # Fz = -dU/dh
+            expterm = exp(-gamma * h)
+            dUdh = eps_cs * expterm * (gamma/h + 1.0/h^2)
 
-                # Fuerza solo en z (hacia el sustrato si Fmag < 0)
-                Fx_p, Fy_p, Fz_p = 0.0, 0.0, Fmag
-                Fx += Fx_p; Fy += Fy_p; Fz += Fz_p
+            Fmag = -dUdh / (eta * (l + d))
 
-                # Par respecto al CM: r × F
-                rx = xp - x; ry = yp - y; rz = zp - z
-                τx += ry*Fz_p - rz*Fy_p
-                τy += rz*Fx_p - rx*Fz_p
-                τz += rx*Fy_p - ry*Fx_p
-            end
+            Fx_p = 0.0
+            Fy_p = 0.0
+            Fz_p = Fmag
+
+            Fx += Fx_p
+            Fy += Fy_p
+            Fz += Fz_p
+
+            rx = xp - x
+            ry = yp - y
+            rz = zp - z
+
+            τx += ry*Fz_p - rz*Fy_p
+            τy += rz*Fx_p - rx*Fz_p
+            τz += rx*Fy_p - ry*Fx_p
         end
     end
 
-    # --- Proyección del par a (θ, φ) ---
-    ux =  cos(theta)*cos(phi)
-    uy =  sin(theta)*cos(phi)
-    uz =  sin(phi)
+    ux = cos(theta)*cos(phi)
+    uy = sin(theta)*cos(phi)
+    uz = sin(phi)
 
-    duθ = du_dtheta(theta, phi)   # (-cosφ sinθ,  cosφ cosθ, 0)
-    duφ = du_dphi(theta,  phi)    # (-sinφ cosθ, -sinφ sinθ, cosφ)
+    duθ = du_dtheta(theta, phi)
+    duφ = du_dphi(theta, phi)
 
-    # sθ = u × du/dθ
     sθx = uy*duθ[3] - uz*duθ[2]
     sθy = uz*duθ[1] - ux*duθ[3]
     sθz = ux*duθ[2] - uy*duθ[1]
 
-    # sφ = u × du/dφ
     sφx = uy*duφ[3] - uz*duφ[2]
     sφy = uz*duφ[1] - ux*duφ[3]
     sφz = ux*duφ[2] - uy*duφ[1]
 
-    # Mismo factor de escala que usas en el resto del código
     scale = 12.0 / ((l + d)^2)
+
     Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
     Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
 
