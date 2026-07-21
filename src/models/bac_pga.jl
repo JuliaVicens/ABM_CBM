@@ -1,251 +1,174 @@
-# --- derivadas del eje u respecto a los ángulos ---
-# u = (cosφ cosθ, cosφ sinθ, sinφ)
+# ============================================================
+# Funciones mecánicas adimensionales para rod3D_grow
+#
+# Convención usada en estas rutinas:
+#   - Las funciones devuelven VELOCIDADES, no fuerzas.
+#   - La fuerza geométrica se divide por L = l + d antes de aplicar
+#     la movilidad traslacional.
+#   - El torque se construye con esa misma fuerza/L.
+#   - Por ello, el prefactor angular 12*mu_rot/L^2 produce en total
+#     la dependencia correcta 12*tau_raw/L^3.
+# ============================================================
+
 @inline function du_dtheta(theta, phi)
-    (-cos(phi)*sin(theta),  cos(phi)*cos(theta),  0.0)
+    return (
+        -cos(phi) * sin(theta),
+         cos(phi) * cos(theta),
+         0.0,
+    )
 end
+
 @inline function du_dphi(theta, phi)
-    (-sin(phi)*cos(theta), -sin(phi)*sin(theta),  cos(phi))
+    return (
+        -sin(phi) * cos(theta),
+        -sin(phi) * sin(theta),
+         cos(phi),
+    )
 end
 
-@inline dot3(a,b) = a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
-
-
-# --- Utilidades de orientación y polos (orden fijo: + y −) ---
 @inline function rod_dir3d(theta, phi)
-    cx = cos(theta); sx = sin(theta)
-    cp = cos(phi);   sp = sin(phi)
-    return (cx*cp, sx*cp, sp)               # u = (cosθ cosφ, sinθ cosφ, sinφ)
+    cp = cos(phi)
+    return (
+        cos(theta) * cp,
+        sin(theta) * cp,
+        sin(phi),
+    )
 end
 
+@inline function rod_poles3d_ordered(x, y, z, l, theta, phi)
+    ux, uy, uz = rod_dir3d(theta, phi)
+    half_l = 0.5 * l
 
-@inline function rod_poles3d_ordered(x,y,z,l,theta,phi)
-    ux,uy,uz = rod_dir3d(theta, phi)
-    hx,hy,hz = 0.5l*ux, 0.5l*uy, 0.5l*uz
-    return (x+hx, y+hy, z+hz), (x-hx, y-hy, z-hz)  # (+, −)
+    return (
+        (x + half_l * ux, y + half_l * uy, z + half_l * uz),
+        (x - half_l * ux, y - half_l * uy, z - half_l * uz),
+    )
 end
 
-
-
-# function repulsiveForces_rods3d_asym(
-#     x,y,z,d,l,theta,phi,
-#     x2,y2,z2,d2,l2,theta2,phi2,
-#     eta, E, A,mu_rot = nothing)
-
-#     Fijx = 0.0; Fijy = 0.0; Fijz = 0.0
-#     Wijtheta = 0.0; Wijphi = 0.0
-
-#     # Puntos más cercanos
-#     xiAux, yiAux, ziAux,  xjAux, yjAux, zjAux =
-#         CBMMetrics.rodIntersection3d_(x, y, z, l, theta, phi,
-#                                      x2, y2, z2, l2, theta2, phi2)
-
-#     dx = xiAux - xjAux
-#     dy = yiAux - yjAux
-#     dz = ziAux - zjAux
-#     rij = sqrt(dx*dx + dy*dy + dz*dz)
-
-#     # Dirección del rod i
-#     ux =  cos(theta)*cos(phi)
-#     uy =  sin(theta)*cos(phi)
-#     uz =  sin(phi)
-#     # (por si acaso) — debería estar ya normalizado
-#     # un = inv(sqrt(ux^2+uy^2+uz^2)); ux*=un; uy*=un; uz*=un
-
-#     if rij > 0.0 && rij < (d + d2)/2
-#         hAux = (d + d2)/2 - rij
-#         nijx = dx / rij
-#         nijy = dy / rij
-#         nijz = dz / rij
-
-#         # Fuerza "cruda" de contacto SIN /eta
-#         Fraw_mag = E * sqrt(d2 * hAux^3) / (l + d)
-#         Fx_raw = Fraw_mag * nijx
-#         Fy_raw = Fraw_mag * nijy
-#         Fz_raw = Fraw_mag * nijz
-
-#         # === 1) TRASLACIÓN con movilidad anisótropa ===
-#         mu_par  = 1.0 / eta  # μ∥
-#         mu_perp = 1.0 / (eta*A)         # μ⊥
-#         u_dot_Fraw = ux*Fx_raw + uy*Fy_raw + uz*Fz_raw
-#         Fasx = mu_perp*Fx_raw + (mu_par - mu_perp)*u_dot_Fraw*ux
-#         Fasy = mu_perp*Fy_raw + (mu_par - mu_perp)*u_dot_Fraw*uy
-#         Fasz = mu_perp*Fz_raw + (mu_par - mu_perp)*u_dot_Fraw*uz
-
-#         Fijx = Fasx;  Fijy = Fasy;  Fijz = Fasz
-
-#         # === 2) ROTACIÓN con fuerza ISOTRÓPICA (no anisotropa) ===
-#         # fuerza isotrópica = Fraw / eta
-#         Fx_iso = Fx_raw
-#         Fy_iso = Fy_raw
-#         Fz_iso = Fz_raw 
-
-#         rx = (xiAux - x); ry = (yiAux - y); rz = (ziAux - z)
-#         τx = ry*Fz_iso - rz*Fy_iso
-#         τy = rz*Fx_iso - rx*Fz_iso
-#         τz = rx*Fy_iso - ry*Fx_iso
-
-#         # Proyección a (θ, φ)
-#         duθx, duθy, duθz = du_dtheta(theta, phi)
-#         duφx, duφy, duφz = du_dphi(theta,  phi)
-
-#         sθx = uy*duθz - uz*duθy
-#         sθy = uz*duθx - ux*duθz
-#         sθz = ux*duθy - uy*duθx
-
-#         sφx = uy*duφz - uz*duφy
-#         sφy = uz*duφx - ux*duφz
-#         sφz = ux*duφy - uy*duφx
-
-#         # Escala rotacional del caso 3D isotrópico
-#         scale = 12.0 / ((l + d)^2)*mu_perp
-
-#         Wijtheta = scale * (τx*sθx + τy*sθy + τz*sθz)
-#         Wijphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
-#     end
-
-#     return Fijx, Fijy, Fijz, Wijtheta, Wijphi
-# end
-
+# ------------------------------------------------------------
+# Repulsión célula-célula
+# ------------------------------------------------------------
 function repulsiveForces_rods3d_asym(
     x, y, z, d, l, theta, phi,
     x2, y2, z2, d2, l2, theta2, phi2,
-    eta, E, A; mu_rot = nothing)
-
-    # -----------------------------
-    # Salidas: contribuciones a las velocidades
-    # -----------------------------
+    eta, E, A;
+    mu_rot = nothing,
+)
     vix = 0.0
     viy = 0.0
     viz = 0.0
-    ωtheta = 0.0
-    ωphi   = 0.0
+    omega_theta = 0.0
+    omega_phi   = 0.0
 
-    # -----------------------------
-    # Movilidades
-    # A > 1  => moverse perpendicular al eje largo cuesta más
-    # -----------------------------
     mu_par  = 1.0 / eta
     mu_perp = 1.0 / (eta * A)
+    mu_rot === nothing && (mu_rot = mu_perp)
 
-    # Si no se especifica, tomamos una movilidad rotacional efectiva
-    # igual a la perpendicular (aproximación razonable y simple)
-    if mu_rot === nothing
-        mu_rot = mu_perp
-    end
+    ux, uy, uz = rod_dir3d(theta, phi)
 
-    # -----------------------------
-    # Dirección unitaria del rod i
-    # u(theta, phi) = (cosθ cosφ, sinθ cosφ, sinφ)
-    # -----------------------------
-    ux = cos(theta) * cos(phi)
-    uy = sin(theta) * cos(phi)
-    uz = sin(phi)
-
-    # -----------------------------
-    # Puntos más cercanos entre ambos segmentos
-    # -----------------------------
-    xiAux, yiAux, ziAux, xjAux, yjAux, zjAux =
+    xi, yi, zi, xj, yj, zj =
         CBMMetrics.rodIntersection3d_(
             x, y, z, l, theta, phi,
-            x2, y2, z2, l2, theta2, phi2
+            x2, y2, z2, l2, theta2, phi2,
         )
 
-    # Vector desde j hacia i en el punto de contacto
-    dx = xiAux - xjAux
-    dy = yiAux - yjAux
-    dz = ziAux - zjAux
-    rij = sqrt(dx*dx + dy*dy + dz*dz)
+    dx = xi - xj
+    dy = yi - yj
+    dz = zi - zj
+    rij2 = dx^2 + dy^2 + dz^2
 
-    # -----------------------------
-    # Contacto repulsivo
-    # -----------------------------
     contact_dist = 0.5 * (d + d2)
 
-    if rij > 0.0 && rij < contact_dist
+    if rij2 > 0.0 && rij2 < contact_dist^2
+        rij = sqrt(rij2)
+        overlap = contact_dist - rij
 
-        # Solapamiento efectivo
-        hAux = contact_dist - rij
+        nx = dx / rij
+        ny = dy / rij
+        nz = dz / rij
 
-        # Normal unitaria j -> i
-        nijx = dx / rij
-        nijy = dy / rij
-        nijz = dz / rij
+        L = l + d
 
-        # -----------------------------
-        # 1) Fuerza geométrica de contacto
-        # -----------------------------
-        # Mantengo tu ley original, pero SIN movilidad aquí
-        # porque en overdamped primero va la "fuerza",
-        # y luego la movilidad la convierte en velocidad.
-        Fmag = E * sqrt(d2 * hAux^3) / (l + d)
+        # Fuerza geométrica dividida por L:
+        # dr/dt = M*F/L
+        d_eff = 0.5 * (d + d2)
+        Fmag = E * sqrt(d_eff * overlap^3) / L
 
-        Fx = Fmag * nijx
-        Fy = Fmag * nijy
-        Fz = Fmag * nijz
+        Fx = Fmag * nx
+        Fy = Fmag * ny
+        Fz = Fmag * nz
 
-        # -----------------------------
-        # 2) Velocidad traslacional anisótropa
-        # v = M_t * F
-        # M_t = mu_perp I + (mu_par - mu_perp) u u^T
-        # -----------------------------
-        u_dot_F = ux*Fx + uy*Fy + uz*Fz
+        u_dot_F = ux * Fx + uy * Fy + uz * Fz
 
         vix = mu_perp * Fx + (mu_par - mu_perp) * u_dot_F * ux
         viy = mu_perp * Fy + (mu_par - mu_perp) * u_dot_F * uy
         viz = mu_perp * Fz + (mu_par - mu_perp) * u_dot_F * uz
 
-        # -----------------------------
-        # 3) Torque geométrico respecto al centro de i
-        # tau = r_contact x F
-        # -----------------------------
-        rx = xiAux - x
-        ry = yiAux - y
-        rz = ziAux - z
+        rx = xi - x
+        ry = yi - y
+        rz = zi - z
 
-        τx = ry*Fz - rz*Fy
-        τy = rz*Fx - rx*Fz
-        τz = rx*Fy - ry*Fx
+        tau_x = ry * Fz - rz * Fy
+        tau_y = rz * Fx - rx * Fz
+        tau_z = rx * Fy - ry * Fx
 
-        # -----------------------------
-        # 4) Proyección del torque sobre (theta, phi)
-        # -----------------------------
         duθx, duθy, duθz = du_dtheta(theta, phi)
         duφx, duφy, duφz = du_dphi(theta, phi)
 
-        # sθ = u × (du/dθ)
-        sθx = uy*duθz - uz*duθy
-        sθy = uz*duθx - ux*duθz
-        sθz = ux*duθy - uy*duθx
+        sθx = uy * duθz - uz * duθy
+        sθy = uz * duθx - ux * duθz
+        sθz = ux * duθy - uy * duθx
 
-        # sφ = u × (du/dφ)
-        sφx = uy*duφz - uz*duφy
-        sφy = uz*duφx - ux*duφz
-        sφz = ux*duφy - uy*duφx
+        sφx = uy * duφz - uz * duφy
+        sφy = uz * duφx - ux * duφz
+        sφz = ux * duφy - uy * duφx
 
-        # -----------------------------
-        # 5) Velocidad angular generalizada
-        # ω_gen ~ mu_rot * torque_projected
-        # Mantengo tu prefactor geométrico
-        # -----------------------------
-        scale = 12.0 * mu_rot / ((l + d)^2)
+        # Correcto aquí: tau ya contiene el factor 1/L.
+        scale = 12.0 * mu_rot / L^2
 
-        ωtheta = scale * (τx*sθx + τy*sθy + τz*sθz)
-        ωphi   = scale * (τx*sφx + τy*sφy + τz*sφz)
+        omega_theta = scale * (
+            tau_x * sθx +
+            tau_y * sθy +
+            tau_z * sθz
+        )
+
+        omega_phi = scale * (
+            tau_x * sφx +
+            tau_y * sφy +
+            tau_z * sφz
+        )
     end
 
-    return vix, viy, viz, ωtheta, ωphi
+    return vix, viy, viz, omega_theta, omega_phi
 end
-
-
+# ------------------------------------------------------------
+# Adhesión célula-sustrato mediante potencial Yukawa
+#
+# h = zp - zwall:
+# distancia entre el centro del polo y el sustrato.
+#
+# La adhesión actúa únicamente cuando:
+#     d/2 < h < rcut_h
+#
+# Por tanto, h nunca se evalúa cerca de cero y el potencial
+# no presenta singularidad en la región activa.
+#
+# U(h) = -eps_cs * exp(-gamma*h) / h
+# ------------------------------------------------------------
 function substrateAttraction_rods_yukawa3d(
     x, y, z, d, l, theta, phi,
     eta, eps_cs, gamma, A;
-    rcut_h = 5.0, mu_rot = nothing
+    zwall = 0.0,
+    rcut_h = 5.0,
+    mu_rot = nothing,
 )
-    Fx = 0.0; Fy = 0.0; Fz = 0.0
-    Wθ = 0.0; Wφ = 0.0
+    vx = 0.0
+    vy = 0.0
+    vz = 0.0
 
-    # Movilidades overdamped
+    omega_theta = 0.0
+    omega_phi   = 0.0
+
     mu_par  = 1.0 / eta
     mu_perp = 1.0 / (eta * A)
 
@@ -253,62 +176,83 @@ function substrateAttraction_rods_yukawa3d(
         mu_rot = mu_perp
     end
 
-    # Dirección del rod
-    ux = cos(theta) * cos(phi)
-    uy = sin(theta) * cos(phi)
-    uz = sin(phi)
+    ux, uy, uz = rod_dir3d(theta, phi)
 
-    a = 0.0  # plano en z=0
+    pole_plus, pole_minus =
+        rod_poles3d_ordered(
+            x, y, z,
+            l, theta, phi,
+        )
 
-    # Polos del rod
-    (x1, y1, z1), (x2, y2, z2) = rod_poles3d_ordered(x, y, z, l, theta, phi)
+    Fgx = 0.0
+    Fgy = 0.0
+    Fgz = 0.0
 
-    # Acumuladores de fuerza geométrica y torque geométrico
-    Fgx = 0.0; Fgy = 0.0; Fgz = 0.0
-    τx = 0.0;  τy = 0.0;  τz = 0.0
+    tau_x = 0.0
+    tau_y = 0.0
+    tau_z = 0.0
 
-    for pole in 1:2
-        xp, yp, zp = pole == 1 ? (x1, y1, z1) : (x2, y2, z2)
+    L = l + d
+    h_contact = d / 2
 
-        # MISMA definición que en tu versión que funcionaba
-        s = zp
-        h = s - a + d/2
+    for (xp, yp, zp) in (pole_plus, pole_minus)
 
-        if h > 0.0 && h < rcut_h
-            # MISMA ley que antes
-            f    = exp(gamma * h) / h
-            dUdh = eps_cs * f * (gamma - 1.0 / h)
+        # Distancia centro del polo–sustrato
+        h = zp - zwall
 
-            # Fuerza geométrica (sin movilidad aún)
-            Fz_p = -dUdh / (l + d)
-            Fx_p = 0.0
-            Fy_p = 0.0
+        # Solo actúa fuera del contacto y dentro del cutoff
+        if h_contact < h < rcut_h
 
-            Fgx += Fx_p
-            Fgy += Fy_p
+            expterm = exp(-gamma * h)
+
+            # U(h) = -eps_cs exp(-gamma*h)/h
+            #
+            # Fz = -dU/dh
+            #    = -eps_cs exp(-gamma*h)
+            #      (gamma/h + 1/h²)
+            #
+            # Fz < 0: atracción hacia el sustrato.
+            Fz_p = -eps_cs * expterm *
+                   (
+                       gamma / h +
+                       1.0 / h^2
+                   ) / L
+
             Fgz += Fz_p
 
-            # Torque geométrico respecto al CM
             rx = xp - x
             ry = yp - y
             rz = zp - z
 
-            τx += ry * Fz_p - rz * Fy_p
-            τy += rz * Fx_p - rx * Fz_p
-            τz += rx * Fy_p - ry * Fx_p
+            tau_x += ry * Fz_p
+            tau_y -= rx * Fz_p
         end
     end
 
     # Movilidad traslacional anisótropa
-    u_dot_F = ux * Fgx + uy * Fgy + uz * Fgz
+    u_dot_F =
+        ux * Fgx +
+        uy * Fgy +
+        uz * Fgz
 
-    Fx = mu_perp * Fgx + (mu_par - mu_perp) * u_dot_F * ux
-    Fy = mu_perp * Fgy + (mu_par - mu_perp) * u_dot_F * uy
-    Fz = mu_perp * Fgz + (mu_par - mu_perp) * u_dot_F * uz
+    vx =
+        mu_perp * Fgx +
+        (mu_par - mu_perp) * u_dot_F * ux
+
+    vy =
+        mu_perp * Fgy +
+        (mu_par - mu_perp) * u_dot_F * uy
+
+    vz =
+        mu_perp * Fgz +
+        (mu_par - mu_perp) * u_dot_F * uz
 
     # Proyección angular
-    duθx, duθy, duθz = du_dtheta(theta, phi)
-    duφx, duφy, duφz = du_dphi(theta, phi)
+    duθx, duθy, duθz =
+        du_dtheta(theta, phi)
+
+    duφx, duφy, duφz =
+        du_dphi(theta, phi)
 
     sθx = uy * duθz - uz * duθy
     sθy = uz * duθx - ux * duθz
@@ -318,191 +262,200 @@ function substrateAttraction_rods_yukawa3d(
     sφy = uz * duφx - ux * duφz
     sφz = ux * duφy - uy * duφx
 
-    scale = 12.0 * mu_rot / ((l + d)^2)
-    Wθ = scale * (τx * sθx + τy * sθy + τz * sθz)
-    Wφ = scale * (τx * sφx + τy * sφy + τz * sφz)
+    # El torque ya contiene el factor 1/L.
+    scale = 12.0 * mu_rot / L^2
 
-    return Fx, Fy, Fz, Wθ, Wφ
+    omega_theta = scale * (
+        tau_x * sθx +
+        tau_y * sθy +
+        tau_z * sθz
+    )
+
+    omega_phi = scale * (
+        tau_x * sφx +
+        tau_y * sφy +
+        tau_z * sφz
+    )
+
+    return (
+        vx,
+        vy,
+        vz,
+        omega_theta,
+        omega_phi,
+    )
 end
 
-
+# ------------------------------------------------------------
+# Repulsión célula-sustrato
+# ------------------------------------------------------------
 function substrateRepulsion_rods3d(
     x, y, z, d, l, theta, phi,
     eta, Ebv, A;
-    zwall = 0.0, mu_rot = nothing
+    zwall = 0.0,
+    mu_rot = nothing,
 )
-    # --------------------------------
-    # Salidas: contribuciones a velocidades
-    # --------------------------------
     vx = 0.0
     vy = 0.0
     vz = 0.0
-    Wθ = 0.0
-    Wφ = 0.0
+    omega_theta = 0.0
+    omega_phi   = 0.0
 
-    # --------------------------------
-    # Movilidades
-    # --------------------------------
     mu_par  = 1.0 / eta
     mu_perp = 1.0 / (eta * A)
+    mu_rot === nothing && (mu_rot = mu_perp)
 
-    if mu_rot === nothing
-        mu_rot = mu_perp
-    end
+    ux, uy, uz = rod_dir3d(theta, phi)
+    pole_plus, pole_minus =
+        rod_poles3d_ordered(x, y, z, l, theta, phi)
 
-    # --------------------------------
-    # Dirección del rod
-    # --------------------------------
-    ux = cos(theta) * cos(phi)
-    uy = sin(theta) * cos(phi)
-    uz = sin(phi)
+    Fgx = 0.0
+    Fgy = 0.0
+    Fgz = 0.0
 
-    # --------------------------------
-    # Polos del rod
-    # --------------------------------
-    (x1, y1, z1), (x2, y2, z2) = rod_poles3d_ordered(x, y, z, l, theta, phi)
+    tau_x = 0.0
+    tau_y = 0.0
+    tau_z = 0.0
 
-    # --------------------------------
-    # Acumuladores geométricos
-    # --------------------------------
-    Fxg = 0.0
-    Fyg = 0.0
-    Fzg = 0.0
+    L = l + d
 
-    τx = 0.0
-    τy = 0.0
-    τz = 0.0
+    for (xp, yp, zp) in (pole_plus, pole_minus)
+        overlap = zwall + d / 2 - zp
 
-    # --------------------------------
-    # Repulsión del sustrato en cada polo
-    # --------------------------------
-    for pole in 1:2
-        xp, yp, zp = pole == 1 ? (x1, y1, z1) : (x2, y2, z2)
+        if overlap > 0.0
+            Fz_p = Ebv * sqrt(d * overlap^3) / L
+            Fgz += Fz_p
 
-        # Solapamiento con el plano z = zwall
-        δ = zwall + d/2 - zp
-
-        if δ > 0.0
-            # Fuerza geométrica repulsiva tipo Hertz
-            Fh = Ebv * sqrt(d * δ^3) / (l + d)
-
-            # Fuerza vertical (+z)
-            Fx_p = 0.0
-            Fy_p = 0.0
-            Fz_p = Fh
-
-            Fxg += Fx_p
-            Fyg += Fy_p
-            Fzg += Fz_p
-
-            # Torque geométrico respecto al CM
             rx = xp - x
             ry = yp - y
             rz = zp - z
 
-            τx += ry * Fz_p - rz * Fy_p
-            τy += rz * Fx_p - rx * Fz_p
-            τz += rx * Fy_p - ry * Fx_p
+            tau_x += ry * Fz_p
+            tau_y -= rx * Fz_p
         end
     end
 
-    # --------------------------------
-    # Velocidad traslacional anisótropa
-    # v = M_t * F
-    # --------------------------------
-    u_dot_F = ux * Fxg + uy * Fyg + uz * Fzg
+    u_dot_F = ux * Fgx + uy * Fgy + uz * Fgz
 
-    vx = mu_perp * Fxg + (mu_par - mu_perp) * u_dot_F * ux
-    vy = mu_perp * Fyg + (mu_par - mu_perp) * u_dot_F * uy
-    vz = mu_perp * Fzg + (mu_par - mu_perp) * u_dot_F * uz
+    vx = mu_perp * Fgx + (mu_par - mu_perp) * u_dot_F * ux
+    vy = mu_perp * Fgy + (mu_par - mu_perp) * u_dot_F * uy
+    vz = mu_perp * Fgz + (mu_par - mu_perp) * u_dot_F * uz
 
-    # --------------------------------
-    # Proyección del torque a (θ, φ)
-    # --------------------------------
     duθx, duθy, duθz = du_dtheta(theta, phi)
     duφx, duφy, duφz = du_dphi(theta, phi)
 
-    # sθ = u × du/dθ
     sθx = uy * duθz - uz * duθy
     sθy = uz * duθx - ux * duθz
     sθz = ux * duθy - uy * duθx
 
-    # sφ = u × du/dφ
     sφx = uy * duφz - uz * duφy
     sφy = uz * duφx - ux * duφz
     sφz = ux * duφy - uy * duφx
 
-    scale = 12.0 * mu_rot / ((l + d)^2)
+    scale = 12.0 * mu_rot / L^2
 
-    Wθ = scale * (τx * sθx + τy * sθy + τz * sθz)
-    Wφ = scale * (τx * sφx + τy * sφy + τz * sφz)
+    omega_theta = scale * (
+        tau_x * sθx +
+        tau_y * sθy +
+        tau_z * sθz
+    )
 
-    return vx, vy, vz, Wθ, Wφ
+    omega_phi = scale * (
+        tau_x * sφx +
+        tau_y * sφy +
+        tau_z * sφz
+    )
+
+    return vx, vy, vz, omega_theta, omega_phi
 end
 
-
-
+# ------------------------------------------------------------
+# Repulsión célula-pad en un punto del eje
+# ------------------------------------------------------------
 function padRepulsion_rods_point_3d(
-    x, y, z, xp, yp, zp, d, l, theta, phi,
-    eta, Ebp, hPad, A; mu_rot = nothing
+    x, y, z,
+    xp, yp, zp,
+    d, l, theta, phi,
+    eta, Ebp, hPad, A;
+    mu_rot = nothing,
 )
-    Fx = 0.0; Fy = 0.0; Fz = 0.0
-    Wθ = 0.0; Wφ = 0.0
+    vx = 0.0
+    vy = 0.0
+    vz = 0.0
+    omega_theta = 0.0
+    omega_phi   = 0.0
     Fz_geom = 0.0
 
     mu_par  = 1.0 / eta
     mu_perp = 1.0 / (eta * A)
+    mu_rot === nothing && (mu_rot = mu_perp)
 
-    if mu_rot === nothing
-        mu_rot = mu_perp
-    end
+    ux, uy, uz = rod_dir3d(theta, phi)
 
-    ux = cos(theta) * cos(phi)
-    uy = sin(theta) * cos(phi)
-    uz = sin(phi)
+    Fgx = 0.0
+    Fgy = 0.0
+    Fgz = 0.0
 
-    Fgx = 0.0; Fgy = 0.0; Fgz = 0.0
-    τx = 0.0; τy = 0.0; τz = 0.0
+    tau_x = 0.0
+    tau_y = 0.0
+    tau_z = 0.0
 
-    δ = zp + d/2 - hPad
+    overlap = zp + d / 2 - hPad
+    L = l + d
 
-    if δ > 0.0
-        Fz_geom = -Ebp * sqrt(d * δ^3) / (l + d)
+    if overlap > 0.0
+        # Densidad lineal geométrica antes de dividir por L.
+        Fz_geom = -Ebp * sqrt(d * overlap^3)
 
-        Fgx = 0.0
-        Fgy = 0.0
-        Fgz = Fz_geom
+        # Contribución a velocidad por unidad de longitud:
+        # M*f/L
+        Fgz = Fz_geom / L
 
         rx = xp - x
         ry = yp - y
         rz = zp - z
 
-        τx = ry * Fgz
-        τy = -rx * Fgz
-        τz = 0.0
+        tau_x = ry * Fgz
+        tau_y = -rx * Fgz
     end
 
     u_dot_F = ux * Fgx + uy * Fgy + uz * Fgz
 
-    Fx = mu_perp * Fgx + (mu_par - mu_perp) * u_dot_F * ux
-    Fy = mu_perp * Fgy + (mu_par - mu_perp) * u_dot_F * uy
-    Fz = mu_perp * Fgz + (mu_par - mu_perp) * u_dot_F * uz
+    vx = mu_perp * Fgx + (mu_par - mu_perp) * u_dot_F * ux
+    vy = mu_perp * Fgy + (mu_par - mu_perp) * u_dot_F * uy
+    vz = mu_perp * Fgz + (mu_par - mu_perp) * u_dot_F * uz
 
     duθx, duθy, duθz = du_dtheta(theta, phi)
     duφx, duφy, duφz = du_dphi(theta, phi)
 
-    sθx = uy*duθz - uz*duθy
-    sθy = uz*duθx - ux*duθz
-    sθz = ux*duθy - uy*duθx
+    sθx = uy * duθz - uz * duθy
+    sθy = uz * duθx - ux * duθz
+    sθz = ux * duθy - uy * duθx
 
-    sφx = uy*duφz - uz*duφy
-    sφy = uz*duφx - ux*duφz
-    sφz = ux*duφy - uy*duφx
+    sφx = uy * duφz - uz * duφy
+    sφy = uz * duφx - ux * duφz
+    sφz = ux * duφy - uy * duφx
 
-    scale = 12.0 * mu_rot / ((l + d)^2)
-    Wθ = scale * (τx*sθx + τy*sθy + τz*sθz)
-    Wφ = scale * (τx*sφx + τy*sφy + τz*sφz)
+    scale = 12.0 * mu_rot / L^2
 
-    return Fx, Fy, Fz, Wθ, Wφ, Fz_geom
+    omega_theta = scale * (
+        tau_x * sθx +
+        tau_y * sθy +
+        tau_z * sθz
+    )
+
+    omega_phi = scale * (
+        tau_x * sφx +
+        tau_y * sφy +
+        tau_z * sφz
+    )
+
+    return (
+        vx,
+        vy,
+        vz,
+        omega_theta,
+        omega_phi,
+        Fz_geom,
+    )
 end
-
